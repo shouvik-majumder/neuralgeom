@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuralgeom"
+version = "0.5.0"
+description = "Unified geometry & topology of neural representations and dynamics (pullback metric + subspace/Grassmannian lens)"
+requires-python = ">=3.10"
+# ---------------------------------------------------------------------------
+# CORE dependencies.
+#
+# numpy is pinned < 2 because the optional geometry/topology stack
+# (geomstats, ripser) is only compatible with numpy 1.x at time of writing;
+# torch and the rest of the core work with numpy 1.26.
+#
+# NOTE ON torch: the pullback / dynamics / tasks / feed-forward-geometry engine
+# (the former ``pbgeom`` half) is built on torch autograd and cannot even be
+# imported without it, so torch is a CORE dependency rather than an optional
+# extra. The genuinely optional, gracefully-degrading heavy dependencies are
+# the ones below under [project.optional-dependencies]; each of the modules
+# that needs one imports it lazily and raises a clear install hint if absent,
+# so ``import neuralgeom`` works with only the core installed.
+# ---------------------------------------------------------------------------
+dependencies = [
+    "numpy>=1.23,<2",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
+    "torch>=2.0",
+    "h5py>=3.7",
+    "matplotlib>=3.6",
+]
+
+[project.optional-dependencies]
+# Closed-form Grassmannian / SPD manifold geometry (log/exp/parallel transport).
+# Needed by neuralgeom.geometry.grassmann.GrassmannManifold and hence by the
+# whole neuralgeom.subspace kinematics + neuralgeom.topology pooled scope.
+geom = ["geomstats>=2.7"]
+# Persistent homology + bottleneck distances (neuralgeom.topology.persistence,
+# neuralgeom.topology.direct).
+topology = ["ripser>=0.6", "persim>=0.3"]
+# Discrete exterior calculus on the pooled manifold (neuralgeom.topology.dec).
+# NB: the PyPI package 'pydec' is a DIFFERENT, unrelated library — do not use it.
+dec = ["dxtr"]
+# PDF reports and the rolling dashboard (neuralgeom.viz.report / .dashboard).
+report = ["reportlab>=4.0", "pillow>=9.0", "pypdf>=3.0"]
+# The neurogym task adapter (neuralgeom.tasks.neurogym).
+neurogym = ["neurogym>=2.0", "gymnasium>=0.29"]
+# Run the example notebooks in examples/.
+notebook = ["ipykernel>=6", "jupyterlab>=4"]
+# Everything (the subspace/topology lens needs at least geom + topology).
+full = [
+    "geomstats>=2.7", "ripser>=0.6", "persim>=0.3", "dxtr",
+    "reportlab>=4.0", "pillow>=9.0", "pypdf>=3.0",
+    "neurogym>=2.0", "gymnasium>=0.29",
+]
+
+[tool.setuptools.packages.find]
+include = ["neuralgeom*"]
+
+[tool.setuptools.package-data]
+neuralgeom = ["py.typed"]

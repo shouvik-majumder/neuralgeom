@@ -1,0 +1,52 @@
+"""
+neuralgeom.synth — synthetic neural data from KNOWN dynamics.
+=========================================================
+
+Generate activity whose generating dynamics are known, so downstream methods
+(neuralgeom.dynamics estimators, neuralgeom.geometry pullbacks) can be validated
+against ground truth before touching real recordings.
+
+    attractor.py    the paper-faithful 2-attractor timing model
+                    (Majumder et al.): a 2-D latent [cue mode, ramping mode]
+                    with two Gaussian-well attractors and a brief cue pulse.
+                    ``generate(mechanism, levels, ...)`` simulates, embeds
+                    into n_neurons noisy 'neurons' (Gaussian or Poisson
+                    counts, matchable to a target mean count), re-zeros time
+                    to cue onset, and returns a plain dict ready for
+                    ``neuralgeom.data.from_synthetic`` — with the noiseless
+                    latent kept as ground truth. Mechanisms: ``input``
+                    (fixed field, cue varies) and ``landscape`` (fixed cue,
+                    field varies).
+    lowrank_rnn.py  a continuous-time low-rank rate RNN emitting the shared
+                    TrialData schema.
+    fixtures.py     tiny latent -> behavior systems with known ground-truth
+                    geometry, for validating the pullback metric.
+
+DEPENDENCY RULE (kept from the three-module refactor): the dynamics
+estimators consume a ``Session`` built by ``neuralgeom.data.from_synthetic`` from
+the plain dict returned here — ``neuralgeom.dynamics`` never imports this
+package, so real and synthetic data flow through the exact same contract.
+(``tests/test_synth.py`` asserts the independence.)
+"""
+
+from .attractor import (generate, make_dataset_2attr, embed_rates, simulate_batch,
+                        simulate_2attr, attractor_field, land_ratio_family,
+                        INPUT_COND, LAND_AY2, LAND_AX2, LAND_AX2AY2, LAND_MATCHED, CUE0,
+                        T_CUE2, CUE_DUR, FIELD_SCALE)
+from .lowrank_rnn import RNNConfig, make_lowrank_connectivity, simulate, make_dataset
+from .fixtures import make_synthetic_readout, sample_states, ramp_trajectories
+# The connectivity-family subspace testbed (ported from ProjectiveSpaceModels).
+# Exposed as a submodule alias to avoid name clashes with lowrank_rnn's
+# RNNConfig/make_dataset — use ``neuralgeom.synth.subspace_rnn.make_trajectory``.
+from . import subspace_rnn
+from .subspace_rnn import SubspaceRNNConfig, build_specs
+
+__all__ = [
+    "generate", "make_dataset_2attr", "embed_rates", "simulate_batch", "simulate_2attr",
+    "attractor_field", "land_ratio_family",
+    "INPUT_COND", "LAND_AY2", "LAND_AX2", "LAND_AX2AY2", "LAND_MATCHED", "CUE0",
+    "T_CUE2", "CUE_DUR", "FIELD_SCALE",
+    "RNNConfig", "make_lowrank_connectivity", "simulate", "make_dataset",
+    "make_synthetic_readout", "sample_states", "ramp_trajectories",
+    "subspace_rnn", "SubspaceRNNConfig", "build_specs",
+]
