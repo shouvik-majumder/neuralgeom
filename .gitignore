@@ -25,7 +25,7 @@ env/
 
 # ---- Data: never commit ----
 SampleData/
-data/
+/data/
 *.h5
 *.hdf5
 *.npy
