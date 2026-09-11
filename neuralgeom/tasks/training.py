@@ -96,15 +96,33 @@ def train(model: nn.Module, task: Task, *, steps: int = 2000,
 @torch.no_grad()
 def evaluate(model: nn.Module, task: Task, *, batch_size: int = 256,
              device: str = "cpu") -> Tensor:
-    """Mean decision accuracy on a fresh batch (model set to eval → no noise)."""
+    """Mean accuracy on a fresh batch (model set to eval → no noise).
+
+    A task that defines its own ``accuracy`` gets to decide what "correct"
+    means, and this defers to it. Only tasks that do NOT override it fall back
+    to the categorical rule below.
+
+    That fallback assumes ``targets`` is ``(B, T)`` integer class labels, which
+    is true of every cross-entropy task but not of a regression task, whose
+    targets are ``(B, T, out)`` — the shapes then fail to broadcast. It also
+    scores by ``argmax``, which is meaningless for a scalar readout. The timing
+    task, for instance, is "correct" when its readout crosses threshold inside
+    the answer window; no amount of argmax expresses that.
+    """
     was_training = model.training
     model.eval()
     batch = task.sample(batch_size).to(device)
     out, _ = model(batch.inputs)
-    # score only the decision epoch: positions where the target is nonzero
-    dec = batch.loss_mask & (batch.targets > 0)
-    pred = out.argmax(-1)
-    acc = ((pred == batch.targets) & dec).sum().double() / dec.sum().clamp_min(1)
+
+    if type(task).accuracy is not Task.accuracy:      # task defines its own
+        acc = task.accuracy(out, batch)
+        acc = acc.mean() if getattr(acc, "ndim", 0) else acc
+    else:
+        # score only the decision epoch: positions where the target is nonzero
+        dec = batch.loss_mask & (batch.targets > 0)
+        pred = out.argmax(-1)
+        acc = ((pred == batch.targets) & dec).sum().double() / dec.sum().clamp_min(1)
+
     if was_training:
         model.train()
     return acc

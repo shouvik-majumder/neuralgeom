@@ -94,11 +94,20 @@ neuralgeom/
   data/          loader, adapters, reduce, conditions, features, trial_data,
                  trajectory  ← the unified Trajectory contract
   synth/         attractor, lowrank_rnn, fixtures, subspace_rnn (connectivity families)
-  tasks/         cognitive tasks + RNN training (+ optional neurogym)
+  tasks/         cognitive tasks + RNN training
+    timing/           the cue-triggered lick-timing task (see below)
+      config.py         three dataclasses: task, curriculum, observations
+      generator.py      the trial state machine (five phases, no torch)
+      scheduler.py      the two-stage curriculum
+      rl.py             REINFORCE with a learned value baseline
+      plots.py          behaviour, optimiser, trial-history and internals figures
+      variants.py       named configurations, the CLI, the generated reference
+      circuits.py       the two published ALM models, re-derived numerically
+      env.py  supervised.py  monitor.py
   viz/  paths.py  fitting.py  stats.py
 
 scripts/   runnable analyses & demos (never imported by the package)
-tests/     numerical checks (51 tests: 27 engine + 24 subspace/topology/contract)
+tests/     numerical checks (166 tests; 115 of them cover tasks/timing/)
 docs/      formulation.tex, subspace_methods.tex (the formal mathematics)
 outputs/   generated artefacts: figures/{demos,rnn,neural}, pdf/, checkpoints/, cache/
 ```
@@ -165,10 +174,55 @@ each quantity describes. Their outputs are stripped in version control (see
 To re-run them, add a kernel: `pip install -e '.[notebook]'` (or `pip install
 ipykernel`) and pick the env's kernel in VS Code / Jupyter. See `examples/README.md`.
 
+## The timing task (`neuralgeom/tasks/timing/`)
+
+A cue-triggered lick-timing task and an RNN trained on it by reinforcement
+learning. The scientific target: train a network that can time, then ask whether
+its dynamics form a **line attractor** (Yang et al. 2025 — timing is the
+integral of a tonic input) or **two point attractors** (Majumder et al. 2026 —
+timing is set by the initial condition). `circuits.py` implements both from
+their released code and `classify()` separates them by counting zero eigenvalues
+of the Jacobian.
+
+**The task.** A stop-licking period of random length; a cue; a required delay
+measured from cue onset; a lick in the answer window earns water. Licking during
+the stop-licking period, on a catch trial, or before the delay elapses all cost
+the same. Nothing ever tells the network when to lick — there is no target time
+in the loss, and the delay may only be inferred from the cue and from four
+channels carrying the previous trial's outcome.
+
+**The agent.** One recurrent network, 128 leaky tanh units, whose state is read
+out by a policy head (a lick probability per 20 ms step) and a value head.
+Trained by REINFORCE with a learned baseline over 16 parallel environments, each
+running its own copy of the task and its own curriculum.
+
+**Run it:**
+
+```bash
+python -m neuralgeom.tasks.timing.variants act --out runs/
+```
+
+Writes the training history, the weights, every trial record, and eight figures:
+the optimiser view, the two heads, behaviour during training, trial history and
+lick-time distributions, network internals, and three frozen-weight test
+conditions (a fixed 1 s delay, a switching 1.0/1.8 s block, and a probe where
+the curriculum keeps running while the weights do not change).
+
+```bash
+python -m neuralgeom.tasks.timing.variants --describe > docs/timing_config_reference.md
+```
+
+Regenerates the configuration reference from the live code.
+
+**Status: nothing has learned to time yet.** The best run reached a 0.30 s delay
+at 80–91% accuracy and lost it. What the agent learns instead is a cue-triggered
+step in lick hazard, giving a fixed ~70 ms latency regardless of the required
+delay. See `current-focus.md` for the diagnosis and the open questions.
+
 ## Running tests & scripts
 
 ```bash
-python -m pytest tests -q                                   # 51 tests (skips extras not installed)
+python -m pytest tests -q                                   # 166 tests (skips extras not installed)
 python examples/check_env.py                                # is this env usable? per-lens verdict
 python examples/verify_all.py                               # run EVERY branch: PASS/SKIP/FAIL
 python scripts/subspace/demo_subspace_pipeline.py --quick   # subspace lens end-to-end (needs geom,topology)
@@ -187,6 +241,10 @@ repo" below.
 | `README.md` | this — orientation, install, layout, quick start, per-machine setup |
 | `docs/formulation.tex` | the rigorous pullback-metric mathematics |
 | `docs/subspace_methods.tex` | formal definitions of the subspace/topology constructions (from ProjectiveSpaceModels) |
+| `docs/timing_rl_formulation.tex` | the timing task and its learning rule, every symbol defined |
+| `docs/timing_config_reference.md` | **generated** — every timing parameter, penalty, threshold and ad-hoc rule |
+| `docs/timing_model_inventory.md` | what each timing term is for, and the evidence for keeping it |
+| `docs/timing_exploration_note.md` | why exploration is a probability floor and not an entropy bonus |
 
 ## Background
 

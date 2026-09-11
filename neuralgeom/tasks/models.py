@@ -84,11 +84,42 @@ class VanillaRNN(_BaseRNN):
     """
 
     def __init__(self, input_size, hidden_size, output_size, *,
-                 tau: float = 100.0, dt: float = 20.0, noise: float = 0.05,
+                 tau=100.0, dt: float = 20.0, noise: float = 0.05,
                  g: float = 1.0, rec_init: str = "gaussian",
-                 train_h0: bool = False, nonlinearity=torch.tanh):
+                 train_h0: bool = False, train_tau: bool = False,
+                 nonlinearity=torch.tanh):
         super().__init__(input_size, hidden_size, output_size)
-        self.alpha = float(dt) / float(tau)
+        # tau may be a single number (every unit identical, the original
+        # behaviour) or a (low, high) pair, in which case the units get time
+        # constants log-uniform over that range. MILLISECONDS, like dt.
+        #
+        # tau is the RATE-UNIT time constant, not a membrane time constant. A
+        # cortical membrane tau is 10-20 ms; 100 ms is the usual value for a
+        # rate unit and is taken to stand for NMDA-dominated synaptic decay.
+        # Do not reach past that range to buy slow dynamics: measured intrinsic
+        # timescales in cortex top out around 350 ms (Murray et al. 2014) and
+        # those are NETWORK autocorrelations, not single-unit leaks.
+        #
+        # Slow behaviour is meant to come from the recurrent connectivity. With
+        # tau = 100 ms (alpha = 0.2), a mode lasting 1 s needs an eigenvalue of
+        # W_rec at +0.90 ON THE POSITIVE REAL AXIS -- |lambda_W| = 0.9 at 0 deg
+        # gives tau_mode = 0.99 s, but the same modulus at 60 deg gives 0.20 s.
+        # A g/sqrt(N) Gaussian scatters eigenvalues uniformly over the disc, so
+        # it puts only ~3 of 128 modes past 1 s. That is a statement about the
+        # INITIALISATION, not about what the architecture can represent.
+        if isinstance(tau, (tuple, list)):
+            lo, hi = float(tau[0]), float(tau[1])
+            t = torch.exp(torch.empty(hidden_size).uniform_(
+                math.log(lo), math.log(hi)))
+        else:
+            t = torch.full((hidden_size,), float(tau))
+        # tau must exceed dt or alpha > 1 and a unit overshoots in one step.
+        log_tau = torch.log(t.clamp_min(float(dt) * 1.0001))
+        if train_tau:
+            self.log_tau = nn.Parameter(log_tau)
+        else:
+            self.register_buffer("log_tau", log_tau)
+        self.dt = float(dt)
         self.noise = float(noise)
         self.phi = nonlinearity
         self.inp = nn.Linear(input_size, hidden_size, bias=True)
@@ -102,16 +133,28 @@ class VanillaRNN(_BaseRNN):
             self.inp.bias.zero_()
         self.h0 = nn.Parameter(torch.zeros(hidden_size), requires_grad=train_h0)
 
+    @property
+    def alpha(self) -> Tensor:
+        """Per-unit leak, dt / tau, as a (hidden,) tensor. Clamped below 1 so a
+        unit can never overshoot within one step."""
+        return (self.dt / torch.exp(self.log_tau)).clamp(1e-4, 1.0)
+
+    @property
+    def tau(self) -> Tensor:
+        return torch.exp(self.log_tau)
+
     def init_state(self, batch_size, device=None, dtype=None) -> Tensor:
         return self.h0.to(device=device or self.h0.device,
                           dtype=dtype or self.h0.dtype).expand(batch_size, -1)
 
     def step(self, x: Tensor, h: Tensor) -> Tensor:
+        a = self.alpha
         pre = self.rec(h) + self.inp(x)
         if self.training and self.noise > 0:
-            pre = pre + math.sqrt(2.0 / self.alpha) * self.noise * \
-                torch.randn_like(pre)
-        return (1 - self.alpha) * h + self.alpha * self.phi(pre)
+            # sqrt(2/alpha) keeps the stationary variance of the noise-driven
+            # state independent of dt -- per unit, since alpha now is.
+            pre = pre + torch.sqrt(2.0 / a) * self.noise * torch.randn_like(pre)
+        return (1 - a) * h + a * self.phi(pre)
 
     def velocity(self, x: Tensor, h: Tensor) -> Tensor:
         """dh/dt in units of the update: F(h, x) - h. Zero at fixed points."""

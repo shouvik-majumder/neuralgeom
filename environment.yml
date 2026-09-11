@@ -1,7 +1,10 @@
 # Conda environment for neuralgeom (the unified geometry+topology library).
 #
-# The pinned numpy<2 is required by the optional geometry/topology stack
-# (geomstats, ripser). Torch is core (the pullback/dynamics engine needs it).
+# numpy is pinned <2 because geomstats 2.8.0 (latest) does
+#     from numpy import (... trapz ...)
+# and numpy 2.0 removed np.trapz. geomstats declares numpy>=1.18.1 with NO
+# upper bound, so a resolver will install a broken combination silently.
+# ripser and persim are NOT the reason -- both work fine on numpy 2. Torch is core (the pullback/dynamics engine needs it).
 # The pip section carries the packages without reliable conda-forge builds.
 name: neuralgeom
 channels:
@@ -31,6 +34,10 @@ dependencies:
       # optional: discrete exterior calculus (NOT 'pydec' — that is unrelated)
       - dxtr
       - pypdf>=3.0
-      # optional: neurogym task adapter
-      - neurogym>=2.0
-      - gymnasium>=0.29
+      # task environments -- the timing task is built directly on
+      # gymnasium. neurogym was REMOVED: it requires numpy==2.2.*,
+      # unsatisfiable against the numpy<2 pin that geomstats forces
+      # (geomstats 2.8.0 imports np.trapz, removed in numpy 2.0).
+      - gymnasium>=1.0
+      # --- development ---
+      - pytest>=7

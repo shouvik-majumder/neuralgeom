@@ -48,6 +48,21 @@ SampleData/
 outputs/
 docs/rendered/
 
+# Training-run output. `runs/` currently holds 2.1 GB of figures, trial
+# records and weights, all of it reproducible from the code plus the variant
+# name. Ignore the whole directory rather than listing extensions: the run
+# writes .png, .json, .npz and .pt side by side and a new one appears every
+# time the report grows a panel.
+runs/
+runs_*/
+*_records.json
+*_hist.json
+*_states.npz
+*_model.pt
+
+# Superseded notes staged for deletion.
+docs/_to_delete/
+
 # ---- Machine-local configuration ----
 data_dir.local
 config.local.*

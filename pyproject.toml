@@ -60,3 +60,8 @@ include = ["neuralgeom*"]
 
 [tool.setuptools.package-data]
 neuralgeom = ["py.typed"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: trains a network; deselect with -m 'not slow'",
+]
