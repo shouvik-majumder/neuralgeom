@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 
 from neuralgeom.geometry.spd import (
-    MetricFieldGeometry,
+    ModelMetricFieldGeometry,
     affine_invariant_distance,
     bures_wasserstein_distance,
     log_euclidean_distance,
@@ -153,11 +153,11 @@ check("pure range rotation: grassmann part == t", abs(float(d_g) - t) < 1e-8)
 check("pure range rotation: spd part == 0", float(d_s) < 1e-8)
 check("total == sqrt(t^2)", abs(float(d) - t) < 1e-8)
 
-# 9. MetricFieldGeometry end-to-end
-print("[9] MetricFieldGeometry")
+# 9. ModelMetricFieldGeometry end-to-end
+print("[9] ModelMetricFieldGeometry")
 model = nn.Sequential(nn.Linear(3, 8), nn.Tanh(), nn.Linear(8, 5)).double()
 X = torch.randn(6, 3)
-geo = MetricFieldGeometry(model)
+geo = ModelMetricFieldGeometry(model)
 Gx = geo.metrics(X)
 check("metrics (B, n, n) symmetric", Gx.shape == (6, 3, 3)
       and torch.allclose(Gx, Gx.transpose(-1, -2)))
@@ -168,13 +168,13 @@ M = geo.frechet_mean(X, metric="log_euclidean")
 check("mean metric (n, n) SPD", M.shape == (3, 3)
       and bool((torch.linalg.eigvalsh(M) > 0).all()))
 # linear model -> constant metric field -> all distances 0
-lingeo = MetricFieldGeometry(nn.Linear(3, 5).double())
+lingeo = ModelMetricFieldGeometry(nn.Linear(3, 5).double())
 check("linear model: constant field, distances ~0",
       lingeo.distance_matrix(X, metric="affine").max() < 1e-6)
 # degenerate case: m < n makes g rank-deficient; bures + fixed_rank still work
 squeeze = nn.Linear(4, 2).double()
 Xs = torch.randn(5, 4)
-sgeo = MetricFieldGeometry(squeeze)
+sgeo = ModelMetricFieldGeometry(squeeze)
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     Db = sgeo.distance_matrix(Xs, metric="bures")
@@ -183,7 +183,7 @@ check("degenerate metrics: bures matrix finite", bool(torch.isfinite(Db).all()))
 check("degenerate metrics: fixed_rank matrix finite, zero diag",
       bool(torch.isfinite(Df).all()) and Df.diagonal().abs().max() < 1e-6)
 # hidden layer
-hgeo = MetricFieldGeometry(model, layer=1)
+hgeo = ModelMetricFieldGeometry(model, layer=1)
 check("hidden-layer metric field works",
       hgeo.metrics(X).shape == (6, 3, 3))
 

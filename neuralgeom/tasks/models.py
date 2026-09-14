@@ -1,6 +1,6 @@
 """
-rnn.models — recurrent networks behind one swappable interface.
-===============================================================
+neuralgeom.tasks.models — recurrent networks behind one common interface.
+=========================================================================
 
 Every model implements:
 
@@ -9,10 +9,10 @@ Every model implements:
     y      = model.readout(h)       # (B,hidden) -> (B,out)
     model.hidden_size, model.state_is_tuple
 
-``step`` is the important one for geometry: it is a pure function of
-(x, h) with no side effects, so ``torch.func`` can take Jacobians of it —
-that is what turns the pullback-metric machinery loose on the *dynamics*
-(recurrent Jacobian dh_{t+1}/dh_t) rather than just a feedforward map.
+``step`` is the method the geometry tools rely on: it is a pure function of
+(x, h) with no side effects, so ``torch.func`` can take Jacobians of it. This
+is what allows the pullback-metric tools to be applied to the *dynamics*
+(recurrent Jacobian dh_{t+1}/dh_t) rather than only to a feedforward map.
 
 VanillaRNN is the standard continuous-time ("leaky") tanh RNN used in
 systems neuroscience:
@@ -20,9 +20,9 @@ systems neuroscience:
     h_{t+1} = (1 - alpha) h_t + alpha * tanh(W_rec h_t + W_in x_t + b + noise)
     alpha   = dt / tau
 
-with alpha < 1 giving the network an intrinsic time constant. Private
-noise during training is what makes solutions robust (and produces the
-attractor structure the analysis module looks for).
+with alpha < 1 giving the network an intrinsic time constant. Noise during
+training encourages robust solutions (and the attractor structure the
+analysis module looks for).
 """
 from __future__ import annotations
 

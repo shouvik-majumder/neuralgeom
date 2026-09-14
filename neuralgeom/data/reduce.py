@@ -1,9 +1,9 @@
 """
-neuro.reduce — pluggable dimensionality reduction for population geometry.
-==========================================================================
+neuralgeom.data.reduce — pluggable dimensionality reduction for population geometry.
+====================================================================================
 
-WHY THIS MODULE EXISTS
-----------------------
+Motivation
+----------
 Choosing to run PCA before computing a geometry is itself an arbitrary
 modelling decision, not a neutral preprocessing step. Different reducers keep
 different things and throw different things away, so a geometric result that
@@ -11,7 +11,7 @@ only appears under one of them is a property of that reducer, not of the
 brain. This module puts every option behind one interface so the geometry can
 be recomputed identically across all of them and the dependence reported.
 
-THE INTERFACE
+The interface
 -------------
 Every reducer implements:
 
@@ -23,8 +23,8 @@ Every reducer implements:
 Reducers are fit on the *training* trials handed to them and applied to any
 trials, so cross-validated / leakage-free use is possible where it matters.
 
-TERMINOLOGY (defined before use)
---------------------------------
+Terminology
+-----------
 *Dimensionality reduction*: replacing each population state (a vector of N
 firing rates, one per unit) with a shorter vector of k numbers that captures
 most of what varies. Formally a linear map R^N -> R^k, i.e. a k x N matrix.

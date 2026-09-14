@@ -1,13 +1,13 @@
 """
-rnn.train — a task-agnostic trainer.
-====================================
+neuralgeom.tasks.training — a task- and model-agnostic trainer.
+===============================================================
 
-Knows nothing about any specific task or model beyond the two interfaces:
+Depends only on the two interfaces:
 
     batch = task.sample(B)        -> TrialBatch (inputs, targets, loss_mask)
     out, H = model(batch.inputs)  -> (B, T, out), (B, T, hidden)
 
-so a new task or a new architecture drops straight in.
+so new tasks and architectures require no changes here.
 
     hist = train(model, task, steps=2000)
     print(hist["acc"][-1])

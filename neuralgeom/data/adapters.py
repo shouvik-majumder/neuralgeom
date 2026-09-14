@@ -1,6 +1,6 @@
 """
 neuralgeom.data.adapters — build the shared ``Session`` from any data source,
-plus the shared PCA state space (and its split-half instrument).
+plus the shared PCA state space (and its split-half instrumental variable).
 =========================================================================
 
 Every analysis in this repository consumes the same ``Session`` object
@@ -20,7 +20,7 @@ starts from:
     state_pca             z-score + PCA on a SHARED basis -> per-trial state
                           trajectories Z (n_trials, T, n_pc)
     state_pca_split_half  the same state estimated TWICE from disjoint halves
-                          of the units — the instrument that removes the
+                          of the units — the instrumental variable that removes the
                           finite-difference velocity bias in
                           ``neuralgeom.dynamics.lds.fit_lds(..., instrument=...)``
 

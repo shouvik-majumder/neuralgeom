@@ -3,8 +3,8 @@ check_env.py — audit the current Python environment for neuralgeom.
 ===================================================================
 
 Run inside any candidate environment to see, package by package, whether it is
-usable as-is, needs an update, or is missing something — plus a per-lens
-verdict. No neuralgeom import required, so it works before install.
+usable as-is, needs an update, or is missing something — plus a verdict per
+feature group. No neuralgeom import required, so it works before install.
 
     python examples/check_env.py            # imports + functional smoke tests
     python examples/check_env.py --quick    # imports and versions only
@@ -38,10 +38,10 @@ CORE = [
     ("scikit-learn", "sklearn", (1, 3), "core", ""),
     ("matplotlib", "matplotlib", (3, 6), "core", ""),
     ("h5py", "h5py", (3, 7), "core", ""),
-    ("torch", "torch", (2, 0), "core", "the pullback/dynamics engine"),
+    ("torch", "torch", (2, 0), "core", "pullback metric / dynamics"),
 ]
 OPTIONAL = [
-    ("geomstats", "geomstats", (2, 7), "geom", "subspace lens (Grassmannian geometry)"),
+    ("geomstats", "geomstats", (2, 7), "geom", "Grassmannian geometry (subspace analyses)"),
     ("ripser", "ripser", None, "topology", "persistent homology"),
     ("persim", "persim", None, "topology", "bottleneck distances"),
     ("gymnasium", "gymnasium", (0, 26), "tasks", "timing task environment"),
@@ -226,9 +226,8 @@ def main():
     core_ok = all(_check(i, mv)[0] == "OK" for _, i, mv, *_ in CORE) and not numpy_bad
     geom_ok = core_ok and {"geom", "topology"} <= present and not fn_fail
     print("\nVerdict:")
-    print(f"  Pullback / dynamics lens : {'READY' if core_ok and not fn_fail else 'NOT READY (fix CORE above)'}")
-    print(f"  Subspace / topology lens : {'READY' if geom_ok else 'install geomstats + ripser + persim'}")
-    print(f"  Timing task (gymnasium)  : {'READY' if core_ok and 'tasks' in present else 'pip install gymnasium'}")
+    print(f"  Pullback metric / dynamics : {'READY' if core_ok and not fn_fail else 'NOT READY (fix CORE above)'}")
+    print(f"  Subspace / topology        : {'READY' if geom_ok else 'install geomstats + ripser + persim'}")
     print(f"  DEC layer                : {'READY' if 'dec' in present else 'optional — pip install dxtr (not pydec)'}")
 
     if numpy_bad:

@@ -1,5 +1,5 @@
-"""Module 2 demo (SYNTHETIC, ground truth known): does the pullback metric recover the state
-direction that actually controls behavior?
+"""Pullback metric of a synthetic readout with known ground truth: does the pullback metric recover
+the state direction that controls behaviour?
 
 We build a synthetic readout whose behavior depends on the latent state in a KNOWN way, so the
 correct 'most behavior-relevant direction' is known in closed form, then check that the pullback

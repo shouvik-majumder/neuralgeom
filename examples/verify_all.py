@@ -1,16 +1,16 @@
 """
-verify_all.py — run every branch of neuralgeom and report PASS / SKIP / FAIL.
-=============================================================================
+verify_all.py — exercise every part of neuralgeom and report PASS / SKIP / FAIL.
+===============================================================================
 
-A single script that exercises each functional branch of the merged library so
-you can confirm, on your own machine, that everything works. Branches that need
-an optional extra you have not installed are SKIPped (not failed), with the
-reason shown. Nothing here needs the bundled datasets — all data is synthetic.
+A single script that runs a small check of each subpackage so you can confirm
+that an installation works. Checks that need an optional extra you have not
+installed are skipped (not failed), with the reason shown. All data is
+synthetic; no datasets are required.
 
     python examples/verify_all.py            # run everything available
     python examples/verify_all.py --quick    # smaller/faster
 
-Exit code is non-zero iff any branch FAILED (skips do not fail the run).
+Exit code is non-zero iff any check FAILED (skips do not fail the run).
 """
 from __future__ import annotations
 
@@ -49,15 +49,15 @@ def _ring_traj(quick):
     from neuralgeom.synth.subspace_rnn import SubspaceRNNConfig, make_trajectory
     N = 24 if quick else 40
     return make_trajectory(SubspaceRNNConfig(
-        connectivity="ring", ring_moving=True, N=N, n_trials=4,
+        connectivity="ring", ring_rotating=True, N=N, n_trials=4,
         duration=1.0, dt=2e-3, noise_std=0.05, seed=3))
 
 
 # --------------------------------------------------------------------------- #
 # branches
 # --------------------------------------------------------------------------- #
-@branch("data.Trajectory contract (roundtrip + adapters)")
-def b_contract(quick):
+@branch("data.Trajectory (HDF5 round-trip + adapters)")
+def b_trajectory(quick):
     import tempfile, os
     import numpy as np
     from neuralgeom.data import Trajectory, load_trajectory, load_trial
@@ -77,7 +77,7 @@ def b_synth(quick):
     tr = make_trajectory(SubspaceRNNConfig(connectivity="lowrank", N=20,
                                            n_trials=3, duration=0.6, dt=2e-3,
                                            lowrank_mode="rotation", seed=2))
-    d = synth.generate("input", synth.INPUT_COND, n_trials=20, poisson=False)
+    d = synth.generate("input", synth.CUE_AMPLITUDE_LEVELS, n_trials=20, poisson=False)
     lr = synth.make_dataset(synth.RNNConfig(N=20, T=40), n_trials=4)
     return f"subspace X{tr.X.shape} · attractor keys={len(d)} · lowrank TrialData ok"
 
@@ -85,9 +85,9 @@ def b_synth(quick):
 @branch("geometry.pullback (feed-forward g = JᵀJ, volume, spectrum)")
 def b_pullback(quick):
     import torch, torch.nn as nn
-    from neuralgeom.geometry import PullbackGeometry
+    from neuralgeom.geometry import ModelPullbackGeometry
     net = nn.Sequential(nn.Linear(3, 32), nn.Tanh(), nn.Linear(32, 8))
-    geo = PullbackGeometry(net)
+    geo = ModelPullbackGeometry(net)
     X = torch.randn(12, 3)
     vol = geo.volume_element(X); ev, rank = geo.spectrum(X)
     return f"mean√detg={float(vol.mean()):.3g} rank={int(rank[0])}"
@@ -121,8 +121,8 @@ def b_grass_torch(quick):
 
 @branch("geometry.grassmann — numpy/geomstats frame API")
 def b_grass_frames(quick):
-    from neuralgeom.geometry import validate_fast_matches_geomstats
-    err = validate_fast_matches_geomstats(N=30, k=2, n_pairs=8, seed=0)
+    from neuralgeom.geometry import check_frame_distance_against_geomstats
+    err = check_frame_distance_against_geomstats(N=30, k=2, n_pairs=8, seed=0)
     return f"fast-path vs geomstats max err = {err:.1e}"
 
 
@@ -134,24 +134,24 @@ def b_subspace(quick):
     tr = _ring_traj(quick)
     emb = embed_from_trajectory(tr, 0, EmbedConfig(k=1, win=40, stride=8))
     kin = compute_kinematics(emb["frames"], emb["win_times"])
-    err = np.nanmax(np.abs(kin["speed"] * kin["dt"] - kin["step_dist"]))
+    err = np.nanmax(np.abs(kin["speed"] * kin["dt"] - kin["step_distance"]))
     tp = tangent_pca(emb["frames"])
     dim = int(np.searchsorted(tp["cum_evr"], 0.90) + 1)
     assert err < 1e-6
-    return f"speed·dt==step_dist(err {err:.0e}) eff={kin['efficiency']:.2f} tdim={dim}"
+    return f"speed·dt==step_distance(err {err:.0e}) endpoint/path={kin['endpoint_to_path_length_ratio']:.2f} tdim={dim}"
 
 
 @branch("topology.persistence (single + pooled PH, 𝔽₂)")
 def b_topology(quick):
     from neuralgeom.subspace import EmbedConfig, PoolConfig
-    from neuralgeom.topology.persistence import (single_trial_distances,
-                                                 pooled_distances, ph, top_life)
+    from neuralgeom.topology.persistence import (within_trial_distances,
+                                                 across_trial_distances, persistent_homology, max_persistence)
     tr = _ring_traj(quick)
-    Ds = single_trial_distances(tr, 0, EmbedConfig(k=1, win=40, stride=8))
-    Dp = pooled_distances(tr, PoolConfig(k=1, n_pool=100, fields=False))
-    loop = max(top_life(ph(Ds, maxdim=1)[1]), top_life(ph(Dp, maxdim=1)[1]))
+    Ds = within_trial_distances(tr, 0, EmbedConfig(k=1, win=40, stride=8))
+    Dp = across_trial_distances(tr, PoolConfig(k=1, n_pool=100, fields=False))
+    loop = max(max_persistence(persistent_homology(Ds, maxdim=1)[1]), max_persistence(persistent_homology(Dp, maxdim=1)[1]))
     assert loop > 0.5, f"expected a ring H1 loop, got {loop:.2f}"
-    return f"moving-ring H1 persistence = {loop:.2f}"
+    return f"rotating-ring H1 persistence = {loop:.2f}"
 
 
 @branch("topology.dec (complex + Betti; dxtr operators if installed)")
@@ -165,19 +165,19 @@ def b_dec(quick):
     note = f"betti_full={b} stress={stress:.2g}"
     try:                                       # dxtr operators (optional)
         man, used = dec.make_manifold(XY, tf)
-        _, df_arr, _ = dec.dec_scalar(man, fields["energy"][used])
+        _, df_arr, _ = dec.dec_scalar(man, fields["mean_squared_activity"][used])
         note += f" · dxtr |df|edges={df_arr.shape[0]}"
     except ImportError:
         note += " · dxtr not installed (DEC operators skipped)"
     return note
 
 
-@branch("topology.direct (state-manifold cross-check)")
+@branch("topology.direct (state-space vs subspace homology)")
 def b_direct(quick):
     from neuralgeom.topology import direct
     tr = _ring_traj(quick)
-    r = direct.compare_direct_vs_grassmann(tr, 0, sub=8, maxdim=1)
-    return f"H1 direct={r['h1_direct']:.2f} grass={r['h1_grass']:.2f} bn={r['bottleneck']:.2f}"
+    r = direct.compare_state_and_subspace_homology(tr, 0, sub=8, maxdim=1)
+    return f"H1 state={r['h1_state']:.2f} subspace={r['h1_subspace']:.2f} bn={r['bottleneck']:.2f}"
 
 
 @branch("dynamics (recurrent Jacobian + LDS fit)")
@@ -203,7 +203,7 @@ def b_tasks(quick):
     return f"trained vanilla RNN, eval acc≈{float(acc):.2f}"
 
 
-BRANCHES = [b_contract, b_synth, b_pullback, b_spd, b_grass_torch,
+BRANCHES = [b_trajectory, b_synth, b_pullback, b_spd, b_grass_torch,
             b_grass_frames, b_subspace, b_topology, b_dec, b_direct,
             b_dynamics, b_tasks]
 

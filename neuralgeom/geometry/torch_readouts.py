@@ -1,4 +1,4 @@
-"""PyTorch readouts with EXACT autograd Jacobians (run in the `pullback` conda env).
+"""PyTorch readouts with exact autograd Jacobians.
 
 These are ReadoutMap-compatible (`.forward(x) -> y`, `.jacobian(x) -> (m, n)`), so they drop
 straight into `PullbackMetric(readout, output_metric)`. The Jacobian is the exact reverse-mode
@@ -9,9 +9,9 @@ Not importable without PyTorch; the rest of the package does not depend on this 
 
 Primary class:
     TorchHeteroscedasticReadout -- an MLP z -> (mu, log sigma) trained by JOINT Gaussian
-    negative log-likelihood. Use with GaussianMuLogSigmaFisher() for the Tier-2 rank-2
-    Fisher-Rao pullback. This is the principled version of the 2-stage mean-variance estimate
-    used in the sklearn demos.
+    negative log-likelihood. Use with GaussianMuLogSigmaFisher() for the rank-2 Fisher-Rao
+    pullback. This replaces the two-stage mean / variance estimate used in the sklearn demos
+    with a jointly fitted model.
 
 Self-test:  python -m neuralgeom.geometry.torch_readouts   (checks jacrev vs finite differences)
 """

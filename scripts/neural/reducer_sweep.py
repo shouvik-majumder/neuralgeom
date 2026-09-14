@@ -1,19 +1,18 @@
 """
-STAGE 2b — Where is the sweet spot? Sweeping the arbitrary choices.
-===================================================================
+reducer_sweep.py — sweep the dimensionality reducer and the number of conditions.
+==================================================================================
 
-MOTIVATION
+Motivation
 ----------
-Stage 2 produced a number (geometry tracks lick time at r ~ 0.7) that depended
-on three choices I made by hand: which reducer, how many dimensions, and how
-many lick-time bins. None of those is principled. Rather than defend one
-setting, this script maps the whole surface and asks where — if anywhere —
-the structure is both STRONG and RELIABLE. That trade-off is the real object
-of interest: too few dimensions and real geometry is discarded; too many and
-covariance estimates are dominated by sampling noise.
+The agreement between condition-wise covariance geometry and lick time depends
+on choices that are not principled: which reducer, how many dimensions, and
+how many lick-time bins. Rather than fix one setting, this script maps the
+whole surface and asks where, if anywhere, the structure is both strong and
+reliable. Too few dimensions discard geometry; too many leave the covariance
+estimates dominated by sampling noise.
 
-TERMS DEFINED BEFORE USE
-------------------------
+Terms
+-----
 * Covariance matrix of a condition: for a group of trials, the matrix whose
   (i,j) entry is how much dimension i and dimension j co-vary across the
   population states in that group. It is the "shape" of the cloud of states.
@@ -33,18 +32,18 @@ TERMS DEFINED BEFORE USE
   PCs. If an effect appears equally under random directions, it is a
   consequence of working in k dimensions, not of the structure PCA found.
 
-WHAT IS SWEPT
+What is swept
 -------------
   reducer      full space | PCA k in {2,3,5,8,10,15,20} | PCA at 80%/90%
                variance | random projection at matched k (null)
   n_bins       {4, 6, 8, 10, 12}
   sessions     several, run separately and never pooled
 
-NOT SWEPT (held fixed, stated): 20 ms bins, causal 60 ms boxcar, qm_pass +
+Held fixed: 20 ms bins, causal 60 ms boxcar, qm_pass +
 rate >= 0.5 Hz units, shrinkage alpha = 0.1, epoch = post-cue pre-lick 0-0.2 s
 and full window, z-scoring per unit.
 
-Run:  python stage2b_reducer_sweep.py [SESSION_ID ...]
+Run:  python scripts/neural/reducer_sweep.py [SESSION_ID ...]
 """
 from __future__ import annotations
 
@@ -74,7 +73,7 @@ from neuralgeom.geometry.spd import affine_invariant_distance              # noq
 SESSIONS = sys.argv[1:] or ["SM259_20230417_g0", "SM239_20230302_g0",
                             "SM318_20230904_g0"]
 WINDOW, ALPHA, N_PERM = 0.20, 0.10, 300
-FIG = fig_dir("neural_stage2b")
+FIG = fig_dir("neural")
 torch.set_grad_enabled(False); torch.set_default_dtype(torch.float64)
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 145, "font.size": 8,
                      "axes.titlesize": 8.5, "axes.labelsize": 8,
@@ -221,7 +220,7 @@ for tag in ["A_prelick", "B_full"]:
             else:
                 a.set_title(lab, fontsize=8)
     fig.suptitle(
-        "Stage 2b — sweeping reducer (rows) x number of lick-time bins "
+        "sweeping reducer (rows) x number of lick-time bins "
         "(columns).   EPOCH "
         f"{'A: post-cue pre-lick 0-0.2 s' if tag=='A_prelick' else 'B: full window -0.5 to 1.5 s'}\n"
         "QUANTITY PLOTTED (top row): trials are grouped into lick-time bins; "
@@ -231,10 +230,10 @@ for tag in ["A_prelick", "B_full"]:
         "geometric distance between those bins' covariance matrices. "
         "r = +1 means the two distance matrices agree perfectly.",
         fontsize=9)
-    save(fig, f"s2b_surface_{tag}.png")
+    save(fig, f"reducer_sweep_surface_{tag}.png")
 
 # --------------------------------------------------------------------------- #
-# FIGURE 2 — the strength/reliability trade-off, all configs as a point cloud
+# FIGURE 2 — the effect-size / reliability trade-off, all configs as a point cloud
 fig, axes = plt.subplots(1, 3, figsize=(13.5, 3.8), constrained_layout=True)
 mk = {"A_prelick": "o", "B_full": "s"}
 for key, R in results.items():
@@ -262,12 +261,12 @@ axes[2].axhline(0.05, color="r", ls="--", label="p = 0.05")
 axes[2].set_xlabel("dimensionality k"); axes[2].set_ylabel("Mantel p")
 axes[2].legend(fontsize=6)
 axes[2].set_title("Significance vs dimensionality")
-fig.suptitle("Stage 2b — each point is ONE (reducer, n_bins) configuration.  "
+fig.suptitle("each point is ONE (reducer, n_bins) configuration.  "
              "Mantel r = agreement between the behavioural distance matrix\n"
              "(|difference in median lick time| between bin pairs) and the "
              "geometric distance matrix (affine-invariant distance between "
              "those bins' population covariances).", fontsize=9)
-save(fig, "s2b_tradeoff.png")
+save(fig, "reducer_sweep_tradeoff.png")
 
 # --------------------------------------------------------------------------- #
 # FIGURE 3 — null reducer: does the effect need PCA's directions at all?
@@ -310,11 +309,11 @@ for c, sid in enumerate(SESSIONS):
     print(f"  {sid[:5]}: PCA r = {np.round(rr_pca,2)}")
     print(f"         random r = {np.round(rp.mean(1),2)} "
           f"(+-{np.round(rp.std(1),2)})")
-fig.suptitle("Stage 2b — NULL REDUCER.  Same Mantel r as elsewhere (behavioural "
+fig.suptitle("NULL REDUCER.  Same Mantel r as elsewhere (behavioural "
              "vs geometric distance matrices, 8 lick-time bins),\ncomputed in "
              "the top-k PC space (blue) versus k RANDOM orthonormal directions "
              "(red, mean+-sd over 8 seeds).\nA gap means the effect depends on "
              "WHICH directions, not merely on how many.  EPOCH A, 8 bins.",
              fontsize=9)
-save(fig, "s2b_null_reducer.png")
+save(fig, "reducer_sweep_random_projection.png")
 print("\nDone.")

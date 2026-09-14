@@ -1,29 +1,33 @@
 """
-neuralgeom.subspace.embed — sliding-window Grassmannian embedding (Step 3).
-===========================================================================
+neuralgeom.subspace.embed — sliding-window Grassmannian embedding.
+==================================================================
 
-Turns a single high-dimensional state trajectory ``X`` (T, N) into a *trajectory
-of points on the Grassmannian* ``Gr(k, N)``: over each sliding window the top-k
+Turns a single high-dimensional state trajectory ``X`` (T, N) into a sequence
+of points on the Grassmannian ``Gr(k, N)``: over each sliding window the top-k
 right singular vectors of the windowed states form an orthonormal frame (N, k),
-i.e. the k-dimensional subspace the activity locally occupies. Tracking that
-subspace — rather than the raw state — is the central move of the
-ProjectiveSpaceModels lens (``Gr(1, N) = ℝPᴺ⁻¹``, hence "projective space").
+i.e. the k-dimensional principal subspace of the activity in that window.
+Tracking that subspace, rather than the raw state, is the construction the
+rest of :mod:`neuralgeom.subspace` and :mod:`neuralgeom.topology` build on
+(``Gr(1, N) = ℝPᴺ⁻¹``, real projective space).
 
-Load-bearing conventions (carried over verbatim — changing them silently is a
-regression):
+Conventions
+-----------
+* ``center=False`` is the default. An uncentered window SVD returns the
+  principal subspace of the second-moment matrix, i.e. the subspace the
+  activity itself lies in. A centered window SVD returns the principal
+  subspace of the window covariance, i.e. the local velocity / tangent
+  subspace, which is noise-dominated when the state is nearly stationary.
+* ``sv_gap = σ_k / σ_{k+1}`` is the singular-value (spectral) gap of each
+  window. It bounds how well the k-dimensional subspace is determined
+  (Davis–Kahan): a k-frame is well conditioned only where the gap is well
+  above 1. Report it alongside every kinematic or topological result.
+* The detected structure depends on ``k``. A rotating line produces a loop on
+  ``Gr(1, N)`` but not on ``Gr(2, N)`` if the containing plane is static, so
+  analyse several values of ``k``.
 
-* ``center=False`` **is the default and matters**: an *uncentered* window SVD
-  captures the subspace the activity *occupies* (stable); a *centered* window
-  captures the local tangent/velocity subspace (noise-dominated at rest).
-* ``sv_gap = σ_k / σ_{k+1}`` is the **frame-reliability diagnostic** — a k-frame
-  is only trustworthy where this is well above 1. Report it alongside every
-  kinematic/topology result.
-* ``k`` acts as a *topological filter*: different ``k`` expose different
-  structure, so analyse multiple ``k``.
-
-The only data-dependent entry point is a plain array (or a
-:class:`~neuralgeom.data.trajectory.Trajectory`), so the same embedding runs on
-synthetic, trained-network, or real data unchanged.
+The entry points take a plain array or a
+:class:`~neuralgeom.data.trajectory.Trajectory`, so the same embedding runs on
+synthetic, trained-network, or recorded data unchanged.
 """
 from __future__ import annotations
 
@@ -31,10 +35,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..geometry.grassmann import frame_distance, frame_distance_matrix
+from ..geometry.grassmann import frame_distance
 
 __all__ = ["EmbedConfig", "embed_trajectory", "embed_from_trajectory",
-           "frames_distance_matrix", "subspace_drift"]
+           "distance_from_start"]
 
 
 @dataclass
@@ -44,16 +48,17 @@ class EmbedConfig:
     k       : subspace dimension (default 1 ⇒ projective space ℝPᴺ⁻¹).
     win     : window length in samples.
     stride  : step between windows in samples.
-    center  : mean-center each window over time before the SVD (default False;
-              see module docstring — False = occupied subspace).
-    metric  : "canonical" (geomstats, √2 × arc-length) or "principal_angle".
+    center  : mean-center each window over time before the SVD (default
+              False: principal subspace of the second-moment matrix; see
+              the module docstring).
+    metric  : "sqrt2_principal_angle" (geomstats, √2 × arc-length) or "principal_angle".
     """
 
     k: int = 1
     win: int = 50
     stride: int = 10
     center: bool = False
-    metric: str = "canonical"
+    metric: str = "sqrt2_principal_angle"
 
 
 def embed_trajectory(X: np.ndarray, cfg: EmbedConfig) -> dict:
@@ -65,7 +70,7 @@ def embed_trajectory(X: np.ndarray, cfg: EmbedConfig) -> dict:
         starts      (M,)       window start indices
         N           int        ambient dimension
         evr         (M,)       top-k variance fraction per window
-        sv_gap      (M,)       σ_k / σ_{k+1} frame reliability per window
+        sv_gap      (M,)       σ_k / σ_{k+1} singular-value gap per window
     """
     X = np.asarray(X, float)
     T, N = X.shape
@@ -104,18 +109,9 @@ def embed_from_trajectory(traj, trial: int, cfg: EmbedConfig) -> dict:
     return emb
 
 
-def frames_distance_matrix(frames: np.ndarray, metric: str = "canonical") -> np.ndarray:
-    """Pairwise geodesic distance matrix (M, M) of a stack of frames.
+def distance_from_start(frames: np.ndarray, metric: str = "sqrt2_principal_angle") -> np.ndarray:
+    """Geodesic distance of each frame from the first frame, d(frame₀, frameₜ).
 
-    A convenience re-export of
-    :func:`neuralgeom.geometry.grassmann.frame_distance_matrix`, the input to
-    the topology layer and to MDS visualisations.
-    """
-    return frame_distance_matrix(frames, metric=metric)
-
-
-def subspace_drift(frames: np.ndarray, metric: str = "canonical") -> np.ndarray:
-    """Geodesic distance of each frame from the first frame — the "subspace
-    drift" curve d(frame₀, frameₜ) that separates settling from moving/looping
-    dynamics."""
+    A curve that rises and stays up indicates a subspace that moves to a new
+    orientation; one that returns toward zero indicates a closed orbit."""
     return np.array([frame_distance(frames[0], f, metric) for f in frames])

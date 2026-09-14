@@ -1,14 +1,15 @@
 """
-neuralgeom.data — self-sufficient data layer for the recordings (and anything else).
-===============================================================================
+neuralgeom.data — loaders, adapters, dimensionality reduction and the Trajectory object.
+========================================================================================
 
     loader.py     HDF5 -> Session (trials x time x units), epoch masks,
                   lick-time conditions. Verifies the response_type coding on
                   every load and drops fields known to be meaningless.
-    adapters.py   the other ways to get a Session: plain arrays, the synthetic
+    adapters.py   alternative constructors for a Session: plain arrays, the synthetic
                   generator's dict (neuralgeom.synth), or a TrialData container —
-                  plus the shared PCA state space and its SPLIT-HALF version
-                  (the instrument for the finite-difference velocity bias).
+                  plus the shared PCA state space and its split-half version
+                  (the instrumental variable used to correct the finite-
+                  difference velocity bias).
     reduce.py     pluggable dimensionality reduction behind one interface
                   (full space, PCA at fixed k or fixed retained variance,
                   random projection as a null, LDA)

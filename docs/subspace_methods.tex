@@ -48,9 +48,9 @@ calculus (DEC), and (iv) the \emph{topology} of the trajectory and of the pooled
 point cloud via persistent homology over $\Fld_2$. For $k=1$, $\Gr(1,N)$ is real
 projective space $\RP^{N-1}$, which motivates the name of the framework. This note
 fixes notation, states every construction as a definition, and derives the
-estimators used downstream. A companion critique note discusses assumptions and
-limitations; a companion slide deck reports the empirical results on a synthetic
-recurrent-network testbed.
+estimators used downstream. The constructions are implemented in the
+\texttt{neuralgeom.subspace} and \texttt{neuralgeom.topology} packages and
+validated on a synthetic recurrent-network testbed.
 \end{abstract}
 
 \tableofcontents
@@ -74,10 +74,10 @@ $\Gr(k,N)$ turns a neural time series into a curve on a curved manifold, so that
 the \emph{rate and manner} of subspace reconfiguration become intrinsic Riemannian
 quantities, and (b) recurrence and periodicity of the computation become
 \emph{topological invariants} (loops, voids) of the curve or of the pooled ensemble
-of subspaces. Two lenses are cross-checked throughout: the \emph{subspace lens}
+of subspaces. Two analyses are compared throughout: the \emph{subspace analysis}
 (activity $\to$ Grassmannian trajectory $\to$ kinematics/DEC/TDA) and a \emph{direct
-lens} (activity $\to$ state-space manifold estimate $\to$ TDA), which guards against
-metric artifacts.
+state-space analysis} (activity $\to$ state-space manifold estimate $\to$ TDA), which
+guards against metric artifacts.
 
 \section{Data model and notation}
 \label{sec:data}
@@ -265,7 +265,7 @@ its speed) and equals the inverse radius of the osculating circle.
 \end{definition}
 
 \begin{definition}[Global summaries]
-Path length, endpoint displacement and geodesic efficiency are
+Path length, endpoint displacement and their ratio are
 \begin{equation}
 L = \sum_{m} d_{\mathrm{can}}(P_m,P_{m+1}),\qquad
 \Delta = d_{\mathrm{can}}(P_1,P_M),\qquad
@@ -333,14 +333,14 @@ steep gradients of $f$ over the subspace manifold; $\Delta f$ localises sources 
 sinks (concentrations) of $f$. The sharp operator $\sharp$ turns $df$ into a vertex
 vector field for streamlines. Scalar fields carried on the vertices are
 \begin{equation}
-\underbrace{\tfrac1N\sum_i x_i^2}_{\text{energy}},\quad
+\underbrace{\tfrac1N\sum_i x_i^2}_{\text{mean squared activity}},\quad
 \underbrace{s_m}_{\text{subspace speed}},\quad
 \underbrace{\frac{(\sum_i\lambda_i)^2}{\sum_i\lambda_i^2}}_{\text{participation ratio}},\quad
-\underbrace{\text{input drive}}_{\text{stimulus}},\quad
-\underbrace{\frac{\norm{F^\top\bm{x}}^2}{\norm{\bm{x}}^2}}_{\text{self-capture}} .
+\underbrace{\text{input magnitude}}_{\text{stimulus}},\quad
+\underbrace{\frac{\norm{F^\top\bm{x}}^2}{\norm{\bm{x}}^2}}_{\text{variance explained}} .
 \end{equation}
-The \emph{self-capture} of a state $\bm{x}$ by its frame $F$ equals the fraction of
-state energy inside the subspace, $\cos^2\!\angle(\bm{x},\Span F)$ for $k=1$, i.e.\
+The \emph{variance explained} of a state $\bm{x}$ by its frame $F$ is the fraction of
+the squared norm of the state lying inside the subspace, $\cos^2\!\angle(\bm{x},\Span F)$ for $k=1$, i.e.\
 $1-d_{\mathrm{ch}}^2$ between the state line and $\Span F$.
 
 \paragraph{Betti numbers (self-contained).} From the oriented boundary matrices
@@ -354,14 +354,14 @@ b_2 = T - \rank\partial_2,
 giving the number of connected components, independent loops, and enclosed voids of
 $\mathcal{K}$ (resp.\ $\mathcal{K}'$).
 
-\paragraph{Cross-projection matrix.} For one trial, with states $\bm{x}(t_i)$ at
+\paragraph{State--subspace projection matrix.} For one trial, with states $\bm{x}(t_i)$ at
 window centres and all visited frames $\{F_j\}$,
 \begin{equation}
 R_{ij} = \frac{\norm{F_j^\top \bm{x}(t_i)}^2}{\norm{\bm{x}(t_i)}^2} \in [0,1],
 \end{equation}
 the fraction of the state at time $t_i$ captured by the subspace visited at time
-$t_j$. Its diagonal is the self-capture time course; its off-diagonal stripes image
-recurrence of the subspace (a loop produces periodic bands parallel to the diagonal).
+$t_j$. Its diagonal is the variance-explained time course; its off-diagonal bands
+indicate recurrence of the subspace (a loop produces periodic bands parallel to the diagonal).
 
 \begin{remark}[Read DEC qualitatively]
 The MDS embedding is not isometric, so $\Delta f$ magnitudes are inflated and
@@ -402,10 +402,10 @@ For two diagrams $\mathcal{D}_1,\mathcal{D}_2$ (in a fixed dimension, here $H_1$
 bottleneck distance is
 $d_B = \inf_{\gamma}\sup_{p} \norm{p-\gamma(p)}_\infty$ over partial matchings
 $\gamma$ (unmatched points sent to the diagonal). We report the pairwise $H_1$
-bottleneck matrix across conditions as a topological ``fingerprint'' dissimilarity.
+bottleneck matrix across conditions as a topological dissimilarity.
 \end{definition}
 
-\section{Direct-manifold cross-check}
+\section{Comparison with the direct state-space analysis}
 \label{sec:direct}
 
 To distinguish genuine structure from artefacts of the subspace map, the identical
@@ -417,22 +417,22 @@ different objects, agreement of the two $H_1$ signatures --- quantified by the
 bottleneck distance after scaling each diagram to unit maximum lifetime --- is strong
 evidence that a detected loop is real rather than a metric artefact.
 
-\section{Load-bearing conventions}
+\section{Conventions}
 \label{sec:conv}
 
 \begin{enumerate}[leftmargin=1.4em]
 \item \textbf{Metric scale.} $d_{\mathrm{can}}=\sqrt2\,d_{\mathrm{arc}}$; topology and
 curve shapes are scale-invariant, absolute magnitudes are not.
-\item \textbf{$k$ as a topological filter.} Different $k$ expose different structure.
+\item \textbf{Dependence on $k$.} Different $k$ expose different structure.
 Example: a rotating line direction produces an $H_1$ loop at $k=1$ (on $\RP^{N-1}$)
 but not at $k=2$ if the containing $2$-plane is static. Always analyse multiple $k$.
-\item \textbf{Frame reliability.} A $k$-frame is trustworthy only where
+\item \textbf{Singular-value gap.} A $k$-frame is well determined only where
 $\sigma_k/\sigma_{k+1}\gg1$. Locally rank-$r$ dynamics make $k>r$ fit noise (huge
 subspace speed, spurious homology).
-\item \textbf{Windows uncentred} by default (occupied subspace, not tangent
-subspace).
+\item \textbf{Windows uncentred} by default (principal subspace of the second-moment
+matrix, not the tangent subspace).
 \item \textbf{Regime placement.} Loops may live within a single trial (moving
-stimulus) or only across trials (settling attractor); analyse both scopes.
+stimulus) or only across trials (settling attractor); analyse both point clouds.
 \end{enumerate}
 
 \section*{Estimator summary}
@@ -443,18 +443,18 @@ stimulus) or only across trials (settling attractor); analyse both scopes.
 \toprule
 Quantity & Symbol / formula & Interpretation \\
 \midrule
-Window frame & top-$k$ right sing.\ vectors of $\tilde X_m$ & occupied subspace \\
-Reliability & $g_m=\sigma_k/\sigma_{k+1}$ & frame trustworthiness \\
+Window frame & top-$k$ right sing.\ vectors of $\tilde X_m$ & local principal subspace \\
+Singular-value gap & $g_m=\sigma_k/\sigma_{k+1}$ & conditioning of the frame \\
 Geodesic distance & $d_{\mathrm{can}}=\sqrt2(\sum\theta_i^2)^{1/2}$ & subspace dissimilarity \\
 Speed & $s_m=d_{\mathrm{can}}(P_m,P_{m+1})/\Delta t$ & reorientation rate \\
 Covariant accel. & $\alpha_m=\norm{(\bm v_m-\PT\bm v_{m-1})/\Delta t}$ & deviation from geodesic \\
 Curvature & $\kappa_m=\norm{\bm a^\perp}/s_m^2$ & path bending \\
-Efficiency & $\mathcal E=\Delta/L$ & directed vs.\ closed orbit \\
+Endpoint / path length & $\mathcal E=\Delta/L$ & directed vs.\ closed orbit \\
 Intrinsic dim. & \#tangent-PCs for $90\%$ var. & subspace-variation complexity \\
-Self-capture & $\norm{F^\top\bm x}^2/\norm{\bm x}^2$ & state energy in subspace \\
+Variance explained & $\norm{F^\top\bm x}^2/\norm{\bm x}^2$ & state variance in subspace \\
 Betti & $b_0,b_1,b_2$ & components / loops / voids \\
 Persistence & lifetime $\varepsilon_d-\varepsilon_b$ ($\Fld_2$) & robust topology \\
-Fingerprint & $H_1$ bottleneck $d_B$ & condition dissimilarity \\
+Bottleneck & $H_1$ bottleneck $d_B$ & condition dissimilarity \\
 \bottomrule
 \end{tabular}
 \end{center}

@@ -1,6 +1,6 @@
 """
-spd_geometry.py
-===============
+neuralgeom.geometry.spd
+=======================
 
 Geometry of the metric-tensor field: each pullback metric g_x = J_x^T J_x is
 a point on the SPD manifold (or, when rank-deficient, on the fixed-rank PSD
@@ -13,8 +13,8 @@ fixed-rank tools.)
 Distances (all batched, broadcasting):
   * ``affine_invariant_distance`` — ||logm(A^{-1/2} B A^{-1/2})||_F, the
     canonical GL(n)-congruence-invariant geometry. SPD only.
-  * ``log_euclidean_distance``    — ||logm A - logm B||_F. SPD only; cheap,
-    a good first-order proxy for affine-invariant.
+  * ``log_euclidean_distance``    — ||logm A - logm B||_F. SPD only; less
+    costly than affine-invariant, to which it is a first-order approximation.
   * ``bures_wasserstein_distance``— Wasserstein-2 between centered Gaussians;
     well-defined on all PSD matrices (rank-deficiency OK).
   * ``psd_fixed_rank_distance``   — Bonnabel–Sepulchre structure metric on
@@ -26,13 +26,13 @@ Means:
     (affine-invariant), fixed-point iteration (Bures–Wasserstein).
 
 Utilities: ``spd_logm/expm/sqrtm/invsqrtm``, ``regularize``,
-``pairwise_spd_distance``, ``psd_decompose``; ``MetricFieldGeometry`` bundles
+``pairwise_spd_distance``, ``psd_decompose``; ``ModelMetricFieldGeometry`` bundles
 everything for one (model, layer): pullback metrics at sample points and
 their pairwise geometry.
 
 Example
 -------
->>> geo = MetricFieldGeometry(model)              # or layer="encoder.2"
+>>> geo = ModelMetricFieldGeometry(model)              # or layer="encoder.2"
 >>> G = geo.metrics(X)                            # (B, n, n) pullback metrics
 >>> D = geo.distance_matrix(X, metric="affine")   # (B, B)
 >>> M = geo.frechet_mean(X, metric="log_euclidean")
@@ -47,7 +47,7 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor
 
-from .jacobian import ModelLike, pullback_metric
+from .jacobian import ModelLike, euclidean_pullback_metric
 from .grassmann import LayerLike, _resolve_fn
 
 __all__ = [
@@ -66,7 +66,7 @@ __all__ = [
     "spd_frechet_mean",
     "psd_decompose",
     "psd_fixed_rank_distance",
-    "MetricFieldGeometry",
+    "ModelMetricFieldGeometry",
 ]
 
 
@@ -367,7 +367,7 @@ def psd_fixed_rank_distance(
 # Convenience wrapper: the metric field of one (model, layer)
 # --------------------------------------------------------------------------- #
 @dataclass
-class MetricFieldGeometry:
+class ModelMetricFieldGeometry:
     """Pullback metrics g_x of one (model, layer) as points on SPD/PSD.
 
     Parameters
@@ -390,7 +390,7 @@ class MetricFieldGeometry:
 
     def metrics(self, X: Tensor) -> Tensor:
         """Pullback metric tensors (B, n, n) at the given points."""
-        g = pullback_metric(
+        g = euclidean_pullback_metric(
             _resolve_fn(self.model, self.layer), X,
             mode=self.mode, chunk_size=self.chunk_size,
         )

@@ -1,15 +1,16 @@
 """Continuous-time rate RNN generator (low-rank emphasis), emitting TrialData.
 
-Architecture matches the sibling RNN-geometry pipeline's contract so trained-network
-activity is interchangeable between projects:
+The output uses the shared TrialData container, so simulated and trained-network activity
+are interchangeable downstream:
 
     tau * xdot = -x + W @ tanh(x) + B @ u(t) + noise,     integrated by Euler(-Maruyama).
 
 Connectivity is either full (`W`) or low-rank `W = (U V^T) / N` with U, V in R^{N x r}
-(low-rank RNNs are the most analyzable substrate for connectivity<->computation<->geometry).
+(low-rank RNNs are the model class in which connectivity, computation and geometry are most
+directly related).
 
-This module provides the *substrate and I/O contract*. Task-training (fitting U, V, B and
-a readout to solve a specific task) is the next milestone; the readout used by
+This module provides the simulator and its I/O. Task training (fitting U, V, B and a
+readout to solve a specific task) is not implemented here; the readout used by
 PullbackMetric can be any trained decoder mapping the state x(t) to the task output.
 """
 

@@ -1,12 +1,13 @@
-"""Autograd geometry of a neural flow: inverse metric learning + Helmholtz/metriplectic potential.
+"""Autograd geometry of a neural flow: inverse metric learning and a Helmholtz potential fit.
 
-Run in the `pullback` conda env (needs PyTorch autograd). Two tools:
+Requires PyTorch autograd. Two tools:
 
-1) fit_potential_helmholtz(Z, F)  -- NONLINEAR metriplectic split.
+1) fit_potential_helmholtz(Z, F)  -- nonlinear gradient / rotational decomposition.
    Fit a scalar potential V_theta(z) (small MLP) minimizing  E|| F(z) + grad V(z) ||^2, i.e. the
    best gradient (curl-free) approximation -grad V to the flow F. The residual R = F + grad V is
-   the divergence-free (rotational / Hamiltonian) remainder. Reports the gradient fraction
-   1 - ||R||^2/||F||^2 (nonlinear generalization of the linear ||S||/||A|| split). Optionally
+   the divergence-free (rotational / Hamiltonian) remainder. Reports
+   gradient_squared_norm_fraction = 1 - ||R||^2/||F||^2 (the nonlinear analogue of the linear
+   ||Sym A|| / ||A|| fraction). Optionally
    fits a constant SPD metric G so F ~ -G grad V.
 
 2) InverseMetricLearner  -- can a metric make the trajectories geodesics?
@@ -16,9 +17,10 @@ Run in the `pullback` conda env (needs PyTorch autograd). Two tools:
    autograd of g. A curve is an (unparametrized) geodesic iff the component of Dv PERPENDICULAR to
    v vanishes. We minimize that perpendicular covariant acceleration over theta and report how far
    below the Euclidean (g=I) baseline it gets:
-       geodesic_index = 1 - ||Dv_perp||^2(g_learned) / ||a_perp||^2(Euclidean).
+       perpendicular_covariant_acceleration_reduction
+           = 1 - ||Dv_perp||^2(g_learned) / ||a_perp||^2(Euclidean).
    ~1 => a metric renders the paths geodesics; ~0 => no metric in the family does (the motion is
-   irreducibly non-geodesic, e.g. a dissipative flow -- which is what we found for the neural data).
+   irreducibly non-geodesic, e.g. a dissipative flow).
 
 Note (theory): a CONSTANT metric has Gamma=0, so Dv=a regardless of g -> constant-metric geodesics
 are straight lines. Only a STATE-DEPENDENT g(z) can bend geodesics to follow curved paths; that is
@@ -37,7 +39,7 @@ try:
     import torch
     import torch.nn as nn
 except Exception as e:                                            # pragma: no cover
-    raise ImportError("torch_geometry requires PyTorch (run in the `pullback` env).") from e
+    raise ImportError("neuralgeom.dynamics.torch_geometry requires PyTorch.") from e
 
 
 # --------------------------------------------------------------------------- #
@@ -143,16 +145,16 @@ def fit_potential_helmholtz(Z, F, hidden=(64, 64), epochs=1500, lr=1e-2, fit_met
         if verbose and ep % max(1, epochs // 5) == 0:
             print(f"  [helmholtz] ep {ep:4d}  train loss {loss.item():.4e}")
 
-    def grad_frac_on(idx):
+    def gradient_squared_norm_fraction_on(idx):
         R = resid_of(Zt[idx], Ft[idx]).detach().numpy()
         Fn = Ft[idx].numpy()
         return 1.0 - (R ** 2).sum() / ((Fn ** 2).sum() + 1e-12)
-    gf_test = grad_frac_on(ite); gf_train = grad_frac_on(itr)
+    gf_test = gradient_squared_norm_fraction_on(ite); gf_train = gradient_squared_norm_fraction_on(itr)
     R_all = resid_of(Zt, Ft).detach().numpy()
     if verbose:
         print(f"  [helmholtz] gradient fraction: out-of-sample={gf_test:.3f} "
               f"(in-sample={gf_train:.3f}); rotational (OOS)={1 - gf_test:.3f}")
-    return dict(Vnet=Vnet, grad_frac=float(gf_test), grad_frac_train=float(gf_train),
+    return dict(Vnet=Vnet, gradient_squared_norm_fraction=float(gf_test), gradient_squared_norm_fraction_train=float(gf_train),
                 residual=R_all, logG=logG)
 
 
@@ -187,7 +189,7 @@ class _SPDMetric(nn.Module):
 
 class InverseMetricLearner:
     """Learn g(z) so that trajectories are (unparametrized) geodesics: minimize the g-perpendicular
-    covariant acceleration. Report geodesic_index vs the Euclidean baseline."""
+    covariant acceleration. Report perpendicular_covariant_acceleration_reduction vs the Euclidean baseline."""
     def __init__(self, n, hidden=(64, 64), eps=1e-2, seed=0):
         self.metric = _SPDMetric(n, hidden, eps, seed).double()
 
@@ -205,7 +207,7 @@ class InverseMetricLearner:
         return (np.vstack(Z), np.vstack(V), np.vstack(Aa))
 
     def _index_on(self, Zt, Vt, At):
-        """geodesic_index on a set of triples (fit-free): 1 - <g-perp covariant accel> /
+        """perpendicular_covariant_acceleration_reduction on a set of triples (fit-free): 1 - <g-perp covariant accel> /
         <Euclidean perp accel>."""
         I = torch.eye(Zt.shape[1], dtype=torch.float64)[None].expand(Zt.shape[0], -1, -1)
         _, base_perp2 = _perp(At, Vt, I)
@@ -215,7 +217,7 @@ class InverseMetricLearner:
         return 1.0 - perp2.mean().item() / (base + 1e-12), base
 
     def fit(self, trajs, dt, epochs=800, lr=5e-3, weight_decay=1e-4, eval_frac=0.25, verbose=True):
-        """Fit g(z) on a TRAIN split of trajectories and report the geodesic_index on HELD-OUT
+        """Fit g(z) on a TRAIN split of trajectories and report the perpendicular_covariant_acceleration_reduction on HELD-OUT
         trajectories, so a flexible metric that merely memorizes each path does not inflate the
         score. Returns both held-out and train indices."""
         trajs = [np.asarray(tr, np.float64) for tr in trajs if len(tr) >= 3]
@@ -239,9 +241,9 @@ class InverseMetricLearner:
         gi_te, base = self._index_on(Zte, Vte, Ate)
         gi_tr, _ = self._index_on(Ztr, Vtr, Atr)
         if verbose:
-            print(f"  [inv-metric] geodesic_index: held-out={gi_te:.3f} (train={gi_tr:.3f})  "
+            print(f"  [inv-metric] perpendicular_covariant_acceleration_reduction: held-out={gi_te:.3f} (train={gi_tr:.3f})  "
                   f"(1 => paths ARE geodesics of g(z); compare to time-shuffle null)")
-        return dict(geodesic_index=float(gi_te), geodesic_index_train=float(gi_tr),
+        return dict(perpendicular_covariant_acceleration_reduction=float(gi_te), perpendicular_covariant_acceleration_reduction_train=float(gi_tr),
                     euclid=base, metric=self.metric)
 
 
@@ -280,9 +282,9 @@ def _selftest():
     F = -gradV0 + curl
     true_gf = (gradV0 ** 2).sum() / ((gradV0 ** 2).sum() + (curl ** 2).sum())
     out = fit_potential_helmholtz(Z, F, hidden=(32,), epochs=1200, verbose=False)
-    print(f"   recovered gradient fraction (out-of-sample)={out['grad_frac']:.3f}, "
-          f"in-sample={out['grad_frac_train']:.3f}, analytic={true_gf:.3f}")
-    assert abs(out["grad_frac"] - true_gf) < 0.1, "Helmholtz fit off"
+    print(f"   recovered gradient fraction (out-of-sample)={out['gradient_squared_norm_fraction']:.3f}, "
+          f"in-sample={out['gradient_squared_norm_fraction_train']:.3f}, analytic={true_gf:.3f}")
+    assert abs(out["gradient_squared_norm_fraction"] - true_gf) < 0.1, "Helmholtz fit off"
     print("   -> Helmholtz split validated.\n")
 
     print("== 3. Inverse metric learner reduces geodesic residual on hyperbolic geodesics ==")
@@ -292,7 +294,7 @@ def _selftest():
         trajs.append(np.c_[cc + rr * np.cos(tt), rr * np.sin(tt)])
     learner = InverseMetricLearner(2, hidden=(64, 64), seed=0)
     res = learner.fit(trajs, dt=(tt[1] - tt[0]), epochs=500, verbose=False)
-    print(f"   geodesic_index (want > 0.5) = {res['geodesic_index']:.3f}")
+    print(f"   perpendicular_covariant_acceleration_reduction (want > 0.5) = {res['perpendicular_covariant_acceleration_reduction']:.3f}")
     print("   -> learner runs and reduces the residual (a state-dependent metric exists).\n")
     print("ALL SELF-TESTS PASSED")
 

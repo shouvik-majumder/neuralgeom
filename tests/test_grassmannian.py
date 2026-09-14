@@ -11,7 +11,7 @@ import torch.nn as nn
 
 from neuralgeom.geometry.grassmann import (
     FeatureExtractor,
-    GrassmannGeometry,
+    ModelSubspaceGeometry,
     grassmann_distance,
     grassmann_exp,
     grassmann_frechet_mean,
@@ -105,8 +105,8 @@ check("layer=None: full model", torch.allclose(J_none, batch_jacobian(model, X))
 
 # 5. Row spaces of different layers are comparable (same ambient space)
 print("[5] Cross-layer comparison in input space")
-g1 = GrassmannGeometry(model, layer=1, which="row", k=2)
-g2 = GrassmannGeometry(model, layer=3, which="row", k=2)
+g1 = ModelSubspaceGeometry(model, layer=1, which="row", k=2)
+g2 = ModelSubspaceGeometry(model, layer=3, which="row", k=2)
 Q1_, _, _ = g1.subspaces(X)
 Q2_, _, _ = g2.subspaces(X)
 d = grassmann_distance(Q1_, Q2_)
@@ -146,8 +146,8 @@ for method in ["projection", "karcher"]:
           grassmann_distance(mu, torch.tensor([[1.0], [0.0], [0.0]])) < 1e-6)
 
 # 8. Wrapper: distance matrix properties on a nonlinear model
-print("[8] GrassmannGeometry wrapper")
-geo = GrassmannGeometry(model, which="column", k=2)
+print("[8] ModelSubspaceGeometry wrapper")
+geo = ModelSubspaceGeometry(model, which="column", k=2)
 D = geo.distance_matrix(X)
 check("distance matrix (B, B)", D.shape == (6, 6))
 check("zero diagonal", D.diagonal().abs().max() < 1e-6)
@@ -165,7 +165,7 @@ bottleneck = nn.Sequential(nn.Linear(4, 2, bias=False),
 Xb = torch.randn(5, 4)
 Qa, _, rank = tangent_subspaces(bottleneck, Xb, which="column")
 check("auto k == numerical rank == 2", Qa.shape[-1] == 2 and bool((rank == 2).all()))
-Qe, _, _ = tangent_subspaces(lin, X, which="column", energy=1.0)
-check("energy=1.0 keeps all directions", Qe.shape[-1] == n)
+Qe, _, _ = tangent_subspaces(lin, X, which="column", variance_fraction=1.0)
+check("variance_fraction=1.0 keeps all directions", Qe.shape[-1] == n)
 
 print("\nAll grassmannian.py checks passed.")

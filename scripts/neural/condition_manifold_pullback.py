@@ -1,8 +1,8 @@
 """
-STAGE 4a — Condition-manifold pullback: the geometry the papers compute.
-========================================================================
+condition_manifold_pullback.py — pullback metric of the (time, lick-time) condition manifold.
+=============================================================================================
 
-THE MAP (note the direction — this is the fix for the rank-1 problem)
+The map (note the direction: a low-dimensional domain, so the metric is full rank)
 
         f : (t, tau)  ->  population state in R^n
 
@@ -26,8 +26,8 @@ manifold and find that trained networks MAGNIFY AREA near decision
 boundaries, and Cayco Gajic & Pellegrino (2026), who compare such metrics
 across models with the spectral ratio.
 
-THE NEUROSCIENCE QUESTION IT ASKS
----------------------------------
+The question
+------------
 Where in the (time, lick-time) plane does the population representation have
 the highest resolution? If area is magnified at particular (t, tau)
 combinations, the circuit devotes more coding capacity to distinguishing
@@ -35,7 +35,7 @@ those conditions. A ridge running along t = tau would mean resolution peaks
 approaching the action; a ridge at small tau would mean the code is sharpest
 for fast trials.
 
-CODOMAIN METRIC — BOTH COMPUTED AND COMPARED
+Codomain metric (both computed and compared)
 --------------------------------------------
   Euclidean       g = J^T J. Every unit counts equally, so high-rate units
                   dominate purely by scale.
@@ -46,19 +46,16 @@ CODOMAIN METRIC — BOTH COMPUTED AND COMPARED
                   code, so it answers "what could a downstream reader
                   actually resolve?" rather than "what varies most".
 
-EPOCH DEFINITIONS (no trial is discarded)
+Epoch definitions (no trial is discarded)
 -----------------------------------------
   EPOCH A  every (trial, bin) sample with t < that trial's lick time. Because
            we pool samples rather than build a rectangular tensor, ALL trials
            contribute — each supplies however many bins precede its own lick.
-           The old fixed-window version had to drop trials that licked inside
-           the window, which biased the retained set towards slow (mostly
-           rewarded) trials; that bias is now gone.
            Causal smoothing guarantees a bin at t < lick contains no post-lick
            spikes, so the mask needs no safety margin.
   EPOCH B  every sample in the fixed window; nothing masked.
 
-CONTROLS
+Controls
 --------
   N1 shuffled tau      permute lick times across trials. The map is refit,
                        so every geometric quantity gets its own null.
@@ -68,7 +65,7 @@ CONTROLS
                        and the metric evaluated on a fixed grid, so the
                        geometry never sees the held-out trials.
 
-Run:  python stage4a_condition_manifold.py [SESSION] [A|B]
+Run:  python scripts/neural/condition_manifold_pullback.py [SESSION] [A|B]
 """
 from __future__ import annotations
 
@@ -100,7 +97,7 @@ SESSION = sys.argv[1] if len(sys.argv) > 1 else "SM239_20230302_g0"
 EPOCH = "B" if "B" in sys.argv[1:] else "A"
 WINDOW, KDEF, NFOLD, STEPS = 0.20, 10, 3, 200
 NGRID, N_NULL = 18, 2
-FIG = fig_dir("neural_stage4a")
+FIG = fig_dir("neural")
 torch.set_default_dtype(torch.float64)
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 145, "font.size": 8,
                      "axes.titlesize": 8.5, "axes.labelsize": 8,
@@ -150,7 +147,7 @@ if EPOCH == "A":
     keep_mask = (tg[None, :] < y[:, None]).ravel()
 else:
     keep_mask = np.ones(ntr * T, dtype=bool)
-print(f"STAGE 4a — {SESSION} ({s_full.group}, day {s_full.training_day}) "
+print(f"condition-manifold pullback — {SESSION} ({s_full.group}, day {s_full.training_day}) "
       f"EPOCH {EPOCH}")
 print(f"  map: (t, lick time) -> population state in R^{KDEF} (PCA)")
 print(f"  {ntr} trials x {T} bins = {ntr*T} candidate samples; "
@@ -307,13 +304,13 @@ for r_, (label, d) in enumerate(res.items()):
     a.set_ylabel("grid points")
     a.set_title(f"[{label}] distribution of\narea magnification", fontsize=7.5)
 fig.suptitle(
-    f"Stage 4a — CONDITION-MANIFOLD PULLBACK.  map f: (t, lick time) -> "
+    f"Condition-manifold pullback.  map f: (t, lick time) -> "
     f"population state, so rank(g) = 2 and volume/anisotropy/curvature all "
     f"exist.\n{SESSION} ({s_full.group}), EPOCH {EPOCH}, PCA k={KDEF}, "
     f"{NFOLD}-fold CV by trial.  Top row: Euclidean codomain metric.  Bottom: "
     f"noise-weighted (g = J^T Sigma^-1 J, distances in d' units).\n"
     f"White dashed line is t = lick time (the moment of action).", fontsize=9)
-save(fig, f"s4a_{EPOCH}_condition_geometry.png")
+save(fig, f"condition_manifold_{EPOCH}_geometry.png")
 
 fig, ax = plt.subplots(1, 3, figsize=(12.5, 3.5), constrained_layout=True)
 ax[0].scatter(res["euclidean"]["vol"][SUPPORT],
@@ -333,6 +330,6 @@ ax[2].set_xticks([0, 1], ["f(t) only", "f(t, lick time)"])
 ax[2].set_ylabel("variance of population state explained")
 ax[2].set_title(f"N2 control: does lick time add\nanything? gain "
                 f"{r2_2d-r2_1d:+.3f}")
-fig.suptitle(f"Stage 4a controls — {SESSION}, EPOCH {EPOCH}", fontsize=9.5)
-save(fig, f"s4a_{EPOCH}_controls.png")
+fig.suptitle(f"Controls — {SESSION}, epoch {EPOCH}", fontsize=9.5)
+save(fig, f"condition_manifold_{EPOCH}_controls.png")
 print("\nDone.")

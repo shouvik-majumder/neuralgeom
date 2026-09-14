@@ -1,5 +1,5 @@
 """Tests for the numpy/geomstats frame-based Grassmannian API merged into
-``neuralgeom.geometry.grassmann`` (from ProjectiveSpaceModels ``gr_utils``)."""
+``neuralgeom.geometry.grassmann``."""
 import sys
 from pathlib import Path
 
@@ -40,20 +40,20 @@ def test_principal_angles_self_zero_and_range():
 
 def test_fast_distance_matches_geomstats():
     # the √2·arc-length convention regression guard
-    err = G.validate_fast_matches_geomstats(N=30, k=2, n_pairs=10, seed=0)
+    err = G.check_frame_distance_against_geomstats(N=30, k=2, n_pairs=10, seed=0)
     assert err < 1e-8
 
 
 def test_canonical_is_sqrt2_times_arclength():
     U, V = _rand_frame(12, 2, 3), _rand_frame(12, 2, 4)
-    d_can = G.frame_distance(U, V, "canonical")
+    d_can = G.frame_distance(U, V, "sqrt2_principal_angle")
     d_arc = G.frame_distance(U, V, "principal_angle")
-    assert abs(d_can - G.SQRT2 * d_arc) < 1e-10
+    assert abs(d_can - G._SQRT2 * d_arc) < 1e-10
 
 
 def test_distance_matrix_symmetric_zero_diag():
     frames = np.stack([_rand_frame(10, 1, s) for s in range(6)])
-    D = G.frame_distance_matrix(frames, "canonical")
+    D = G.frame_distance_matrix(frames, "sqrt2_principal_angle")
     assert D.shape == (6, 6)
     assert np.allclose(D, D.T)
     assert np.allclose(np.diag(D), 0.0)

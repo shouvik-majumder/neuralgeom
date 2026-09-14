@@ -1,33 +1,33 @@
 """
-neuralgeom.topology.dec — Discrete Exterior Calculus on the pooled subspace manifold.
+neuralgeom.topology.dec — discrete exterior calculus on the pooled subspace manifold.
 =====================================================================================
 
-**Optional layer** (ProjectiveSpaceModels Step 5). Builds a 2-D simplicial
-complex approximating the Grassmannian submanifold a network explores (pooled
-across trials), then computes the intrinsic exterior calculus of scalar 0-fields
-on it with ``dxtr``:
+Optional layer. Builds a 2-D simplicial complex approximating the region of
+the Grassmannian that a network explores (pooled across trials), then computes
+the exterior calculus of scalar 0-forms on it with ``dxtr``:
 
     df   = exterior_derivative(f)   gradient 1-form (per edge)
     Δf   = laplacian(f)             Laplace–de Rham 0-form (sources / sinks)
     b0,b1,b2  simplicial Betti numbers from oriented boundary-matrix ranks
 
-plus the **cross-projection matrix** ``R[t, j] = ‖Uⱼᵀx(t)‖² / ‖x(t)‖²`` whose
-diagonal is self-capture and whose off-diagonal stripes image loop recurrence.
+plus the state–subspace projection matrix ``R[t, j] = ‖Uⱼᵀx(t)‖² / ‖x(t)‖²``,
+whose diagonal is the fraction of each state's variance explained by its own
+frame and whose off-diagonal bands indicate that the trajectory revisits
+earlier subspaces (a recurrence plot).
 
-Honest caveat (kept from the source repo): the MDS embedding used to build the
-complex is non-isometric, so Laplacian magnitudes are inflated and readable only
-*qualitatively*; ``df`` and the Betti numbers are robust. The load-bearing
-topology is persistent homology (:mod:`neuralgeom.topology.persistence`), which
-needs no embedding.
+Limitation: the MDS embedding used to build the complex is not isometric, so
+Laplacian magnitudes are inflated and should be read qualitatively; ``df`` and
+the Betti numbers are robust. Persistent homology
+(:mod:`neuralgeom.topology.persistence`) needs no embedding and is the primary
+topological result.
 
 Dependencies: the complex construction (:func:`build_complex`) and
-:func:`betti_from_triangles` need only ``scipy`` + ``scikit-learn`` (core). The
-DEC operators (:func:`dec_scalar`, :func:`make_manifold`) need ``dxtr`` — the
-optional ``[dec]`` extra — imported lazily with a clear error if missing.
+:func:`betti_from_triangles` need only ``scipy`` and ``scikit-learn`` (core).
+The DEC operators (:func:`dec_scalar`, :func:`make_manifold`) need ``dxtr``,
+the optional ``[dec]`` extra, imported lazily with an explicit error.
 
-Gotcha carried over: the PyPI package ``pydec`` is **not** the
-discrete-exterior-calculus PyDEC — it is an unrelated ML library. Use ``dxtr``;
-never add ``pydec``.
+Note: the PyPI package ``pydec`` is an unrelated library, not a
+discrete-exterior-calculus package. Use ``dxtr``.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from dataclasses import dataclass
 import numpy as np
 
 __all__ = ["DECConfig", "build_complex", "betti_from_triangles",
-           "make_manifold", "dec_scalar", "cross_projection"]
+           "make_manifold", "dec_scalar", "subspace_projection_matrix"]
 
 
 @dataclass
@@ -45,8 +45,9 @@ class DECConfig:
 
     n_pool    : pooled vertices (subsample); passed through to pooling.
     mds_dim   : MDS embedding dimension (2 for a triangulable disk).
-    prune_pct : long-edge prune percentile for the secondary "hole hint"
-                (threshold-sensitive; the DEC operators always run on the full
+    prune_pct : percentile of the triangle max-edge length above which
+                Delaunay triangles are pruned, as a threshold-sensitive
+                indication of holes (the DEC operators always run on the full
                 Delaunay disk). None disables pruning.
     seed      : RNG / MDS seed.
     """
@@ -87,7 +88,7 @@ def build_complex(frames, cfg: DECConfig = None):
     from ..geometry.grassmann import frame_distance_matrix
 
     cfg = cfg or DECConfig()
-    D = frame_distance_matrix(frames, metric="canonical")
+    D = frame_distance_matrix(frames, metric="sqrt2_principal_angle")
     mds = MDS(n_components=cfg.mds_dim, dissimilarity="precomputed",
               random_state=cfg.seed, normalized_stress="auto",
               n_init=2, max_iter=300)
@@ -165,11 +166,16 @@ def dec_scalar(manifold, f_vals):
     return df, df_arr, lap_arr
 
 
-def cross_projection(traj, trial: int = 0, k: int = 1, cfg=None) -> dict:
-    """Cross-projection matrix ``R[t, j] = ‖Uⱼᵀx(t)‖² / ‖x(t)‖²`` for one trial.
+def subspace_projection_matrix(traj, trial: int = 0, k: int = 1, cfg=None) -> dict:
+    """State–subspace projection matrix ``R[t, j] = ‖Uⱼᵀx(t)‖² / ‖x(t)‖²`` for
+    one trial: the fraction of the state at time ``t`` captured by the frame
+    visited at time ``j``.
 
-    The diagonal is self-capture; off-diagonal stripes image loop recurrence.
-    Returns ``{R, win_times, diagonal, centrality}``. Needs no dxtr.
+    Returns ``{R, win_times, variance_explained, mean_over_time}`` where
+    ``variance_explained`` is the diagonal (each state explained by its own frame) and
+    ``mean_over_time`` is the time average ``R.mean(axis=0)`` per frame.
+    Off-diagonal bands of ``R`` indicate recurrence of the subspace. Needs no
+    dxtr.
     """
     from ..subspace.embed import EmbedConfig, embed_trajectory
 
@@ -183,4 +189,4 @@ def cross_projection(traj, trial: int = 0, k: int = 1, cfg=None) -> dict:
     proj2 = np.stack([np.sum((Xc @ F[j]) ** 2, axis=1) for j in range(len(F))]).T
     R = proj2 / nrm2[:, None]
     return {"R": R, "win_times": tc,
-            "diagonal": np.diag(R), "centrality": R.mean(axis=0)}
+            "variance_explained": np.diag(R), "mean_over_time": R.mean(axis=0)}

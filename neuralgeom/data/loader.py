@@ -1,6 +1,6 @@
 """
-neuro.loader — read the SampleData Neuropixels sessions into analysis-ready tensors.
-====================================================================================
+neuralgeom.data.loader — read Neuropixels session HDF5 files into analysis-ready tensors.
+==========================================================================================
 
 File format (verified against the files themselves; there is no data
 dictionary shipped with them):
@@ -15,7 +15,7 @@ dictionary shipped with them):
     trials/        per-trial behaviour
     units/         per-unit metadata and quality metrics
 
-THE TASK IS A TIMING TASK. The behavioural variable is ``first_lick_s`` —
+The task is a timing task. The behavioural variable is ``first_lick_s`` —
 *when* the animal licks after the cue. Reward requires withholding until a
 required delay. ``response_type`` is 0 = early lick, 1 = rewarded,
 2 = no response, 3 = no-cue catch trial; the loader verifies this coding
@@ -34,7 +34,7 @@ Verified facts that shape this loader
   absolute trial time, not cue-relative, and is not meaningful. It is
   deliberately dropped from the condition set so downstream code cannot use
   it by accident.
-* In learning sessions the reward criterion DRIFTS within the session (the
+* In learning sessions the reward criterion drifts within the session (the
   bpod protocol has auto-learn: the required delay grows with performance).
   Example: SM259 day 1, the running minimum rewarded lick time climbs
   0.11 -> 0.42 s, so "rewarded" vs "early lick" is partly confounded with

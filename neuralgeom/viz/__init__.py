@@ -1,10 +1,9 @@
 """
-neuralgeom.viz — shared plotting style, PDF reports and the rolling dashboard.
-=========================================================================
+neuralgeom.viz — shared plotting style, metric-field renderings and PDF reports.
+===============================================================================
 
     style.py      one set of rcParams and one savefig helper
     report.py     the Report builder used by every write-up
-    dashboard.py  assembles whatever figures exist into a single PDF
     fields.py     2-D scalar/ellipse renderings of a PullbackMetric field
 """
 from .style import (C_EARLY, C_REW, CHOICE_COLORS, apply_style, note, savefig)
