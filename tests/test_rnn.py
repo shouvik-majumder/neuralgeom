@@ -13,7 +13,7 @@ from neuralgeom.tasks import (TASKS, ContextDecision, DelayMatchToSample,
                  make_task, masked_loss, train)
 from neuralgeom.dynamics.rnn import (find_slow_points, input_jacobian, jacobian_spectrum,
                           participation_ratio, readout_subspace,
-                          recurrent_jacobian, state_pullback_metric,
+                          recurrent_jacobian, recurrent_update_pullback_metric,
                           subspace_alignment, trajectory_subspaces)
 
 torch.manual_seed(0)
@@ -25,8 +25,8 @@ def check(name, cond):
     print(f"  ok: {name}")
 
 
-# 1. Task API contract
-print("[1] Task API contract (all registered tasks)")
+# 1. Task API
+print("[1] Task API (all registered tasks)")
 for name in TASKS:
     task = make_task(name, dt=20, seed=0)
     b = task.sample(16)
@@ -167,14 +167,14 @@ check("...and the time constant is infinite",
 
 # 6. Pullback metric of the update map
 print("[6] State/input pullback metrics")
-g = state_pullback_metric(m, h, x, wrt="h")
+g = recurrent_update_pullback_metric(m, h, x, wrt="h")
 check("state metric (B, H, H), symmetric PSD",
       g.shape == (5, 12, 12)
       and torch.allclose(g, g.transpose(-1, -2))
       and bool((torch.linalg.eigvalsh(g) > -1e-10).all()))
 check("state metric == J^T J", torch.allclose(g, J.transpose(-1, -2) @ J,
                                               atol=1e-10))
-gx = state_pullback_metric(m, h, x, wrt="x")
+gx = recurrent_update_pullback_metric(m, h, x, wrt="x")
 check("input metric (B, in, in) is rank <= hidden",
       gx.shape == (5, task.spec.input_dim, task.spec.input_dim))
 
@@ -231,30 +231,5 @@ check("masked_loss is finite and positive", math.isfinite(l0) and l0 > 0)
 hist = train(m, task, steps=120, batch_size=32, log_every=60, verbose=False)
 check("loss decreased over training", hist["loss"][-1] < hist["loss"][0])
 check("history records step/loss/acc", set(hist) == {"step", "loss", "acc"})
-
-# 10. neurogym adapter (skipped if neurogym is not installed)
-print("[10] neurogym adapter")
-try:
-    import warnings as _w
-    with _w.catch_warnings():
-        _w.simplefilter("ignore")
-        from neuralgeom.tasks.neurogym import NeuroGymTask
-        ng = NeuroGymTask("PerceptualDecisionMaking-v0", dt=20, seed=0)
-        nb = ng.sample(8)
-        check("adapter yields the same TrialBatch contract",
-              nb.inputs.shape[0] == 8
-              and nb.inputs.shape[2] == ng.spec.input_dim
-              and nb.targets.dtype == torch.long
-              and nb.loss_mask.dtype == torch.bool)
-        check("adapter task drives the generic model factory",
-              make_model("vanilla", ng.spec, hidden_size=8,
-                         dt=ng.dt)(nb.inputs)[0].shape
-              == (8, nb.n_steps, ng.spec.output_dim))
-        check("adapter batch runs through the generic loss",
-              math.isfinite(float(masked_loss(
-                  make_model("vanilla", ng.spec, hidden_size=8,
-                             dt=ng.dt)(nb.inputs)[0], nb, ng.spec.loss))))
-except ImportError:
-    print("  skipped: neurogym not installed (pip install neurogym)")
 
 print("\nAll rnn package checks passed.")

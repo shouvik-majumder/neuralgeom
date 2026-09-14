@@ -1,8 +1,8 @@
-"""Module 3 demo (SYNTHETIC, ground truth known): fit ONE linear flow and describe it, and
-check the recovery against the known generating dynamics.
+"""Fit one linear flow to synthetic data with known dynamics, describe it, and check the
+recovery against the generating dynamics.
 
 Same simple recipe as the real demo -- one vector field dz/dt = A z + b fit to all post-cue
-trials, a within-trial time-shuffle null as the significance test, no binning, no instrument,
+trials, a within-trial time-shuffle null as the significance test, no binning, no instrumental variable,
 no metric choices -- but here we also know the truth, so every panel carries a ground-truth
 reference.
 
@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import neuralgeom.synth as syn
 import neuralgeom.dynamics as dyn
 from neuralgeom.data import from_synthetic, state_pca
-from neuralgeom.synth.attractor import attractor_field, A1, A2, T_CUE2, CUE_DUR
+from neuralgeom.synth.attractor import attractor_field, REST_ATTRACTOR, LICK_ATTRACTOR, T_CUE, CUE_DUR
 from neuralgeom.paths import fig_dir
 
 FIGDIR = str(fig_dir("demos"))
@@ -40,8 +40,8 @@ BIN = 0.05
 BASE = -0.6
 
 
-def rot_energy(A):
-    """Coordinate-INVARIANT rotation measure: sum|Im(eig)| / sum|eig|.  0 = pure
+def imag_eigenvalue_fraction(A):
+    """Coordinate-invariant rotation measure: sum|Im(eig)| / sum|eig|.  0 = pure
     gradient/contraction (all-real spectrum), higher = more rotation."""
     ev = np.linalg.eigvals(np.asarray(A))
     return float(np.sum(np.abs(ev.imag)) / (np.sum(np.abs(ev)) + 1e-12))
@@ -77,8 +77,8 @@ def figure_data(d, sess, Z, t):
     for i in ok[:60]:
         m = (t >= 0) & (t < lick[i] + 0.1)
         a.plot(lat[i][m, 0], lat[i][m, 1], color=col[i], alpha=.4, lw=.7)
-    a.scatter(*A1, c="k", s=70, marker="o", label="baseline attractor")
-    a.scatter(*A2, c="r", s=120, marker="*", label="lick attractor")
+    a.scatter(*REST_ATTRACTOR, c="k", s=70, marker="o", label="baseline attractor")
+    a.scatter(*LICK_ATTRACTOR, c="r", s=120, marker="*", label="lick attractor")
     a.set_xlabel("cue mode X"); a.set_ylabel("ramping mode Y")
     a.set_title("KNOWN latent dynamics + single-trial paths", fontsize=10); a.legend(fontsize=8)
 
@@ -144,7 +144,7 @@ def figure_fit(d, sess, Z, t, dv):
     for _ in range(20):
         fr = dyn.fit_shared_input_free(dI["Z"], _roll(dI["V"], dI["group"], rng), cond,
                                        dI["tsec"], groups=dI["group"], input_bin_s=0.05)
-        null_cv.append(fr["cv_r2"]); null_rot.append(rot_energy(fr["field"]["A"]))
+        null_cv.append(fr["cv_r2"]); null_rot.append(imag_eigenvalue_fraction(fr["field"]["A"]))
         null_ev.append(np.linalg.eigvals(fr["field"]["A"]))
     null_cv = np.array(null_cv); null_rot = np.array(null_rot)
     null_ev = np.concatenate(null_ev)
@@ -199,7 +199,7 @@ def figure_fit(d, sess, Z, t, dv):
     # 4. testable claims vs null
     a = ax[1, 1]
     names = ["is there a flow?\n(model CV R2)", "is there rotation?\n(sum|Im|/sum|eig|)"]
-    dat = [free["cv_r2"], rot_energy(A)]
+    dat = [free["cv_r2"], imag_eigenvalue_fraction(A)]
     nullm = [null_cv.mean(), null_rot.mean()]; nulls = [null_cv.std(), null_rot.std()]
     x = np.arange(2)
     a.bar(x, dat, 0.45, color=["#37a", "#c39"], label="data")
@@ -215,7 +215,7 @@ def figure_fit(d, sess, Z, t, dv):
     out = os.path.join(FIGDIR, "dynamics_synthetic_fit.png")
     fig.savefig(out, dpi=105); plt.close(fig); print("Saved", out)
     print(f"synthetic: model CV R2 = {free['cv_r2']:.2f} (null {null_cv.mean():+.2f}); "
-          f"rotation energy = {rot_energy(A):.2f} (null {null_rot.mean():.2f}); "
+          f"imaginary-eigenvalue fraction = {imag_eigenvalue_fraction(A):.2f} (null {null_rot.mean():.2f}); "
           f"{int(np.sum(np.abs(ev.imag) > 1e-6) // 2)} complex pairs")
 
 
@@ -274,16 +274,16 @@ def figure_regressions(d, sess, Z, t):
         "neural state, pre- vs post-cue", "velocity rolled in time (within trial)",
         "velocity (a.u.)", os.path.join(FIGDIR, "dynamics_synthetic_regr_velocity.png"))
     figure_regression_group(
-        R["ttl"], "neuralgeom.dynamics, SYNTHETIC: PREDICT TIME-TO-LICK, pre- vs post-cue  "
+        R["time_to_lick"], "neuralgeom.dynamics, SYNTHETIC: PREDICT TIME-TO-LICK, pre- vs post-cue  "
         "(velocity regressors are MODEL velocities A z + b)",
         "regressor rolled in time (within trial)", "time-to-lick (s)",
         os.path.join(FIGDIR, "dynamics_synthetic_regr_timetolick.png"))
-    print(f"synthetic: time-to-lick decoding  CV R2 pre {R['ttl'][0]['cv_pre']:+.2f}  "
-          f"post {R['ttl'][0]['cv_post']:+.2f}")
+    print(f"synthetic: time-to-lick decoding  CV R2 pre {R['time_to_lick'][0]['cv_pre']:+.2f}  "
+          f"post {R['time_to_lick'][0]['cv_post']:+.2f}")
 
 
 def main():
-    d = syn.generate("input", syn.INPUT_COND, n_trials=150, seed=1, bin_s=BIN, n_neurons=80,
+    d = syn.generate("input", syn.CUE_AMPLITUDE_LEVELS, n_trials=150, seed=1, bin_s=BIN, n_neurons=80,
                      poisson=True, mean_count=0.24)
     sess = from_synthetic(d)
     t = sess.t

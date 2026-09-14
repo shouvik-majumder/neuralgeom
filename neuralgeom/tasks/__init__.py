@@ -1,8 +1,8 @@
 """
-neuralgeom.tasks — self-sufficient synthetic task generation and RNN training.
-=========================================================================
+neuralgeom.tasks — cognitive-task generation and RNN training.
+==============================================================
 
-Three independent layers; swap any one without touching the others.
+Three independent layers:
 
     cognitive.py  what to solve  — TrialBatch API and four cognitive tasks
                   (perceptual decision, evidence integration, context-
@@ -16,12 +16,9 @@ Adding a task: subclass ``Task``, set ``self.spec``, implement
 ``sample(batch_size) -> TrialBatch``, register in ``TASKS``.
 Adding a model: subclass ``_BaseRNN`` and implement ``step(x, h)``.
 
-The cue-triggered lick-timing task is NOT here. It lives in the separate
-``timingtask`` repository, along with its agents and its RL trainer, and hands
-its results back as a ``Trajectory`` HDF5 file that
-``neuralgeom.data.load_trajectory`` reads. It carries its own copies of
-``models.py`` and ``training.py`` so that it stands alone; those copies are
-allowed to diverge from these, and that is the point of the split.
+The cue-triggered timing task is maintained in a separate repository
+(``timingtask``). It exports a ``Trajectory`` HDF5 file that
+``neuralgeom.data.load_trajectory`` reads; the two packages share no code.
 """
 from .cognitive import (ContextDecision, DelayMatchToSample,
                         EvidenceIntegration, PerceptualDecision, TASKS, Task,

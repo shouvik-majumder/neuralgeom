@@ -1,9 +1,9 @@
 """
-rnn.analysis — geometry of recurrent dynamics.
-==============================================
+neuralgeom.dynamics.rnn — geometry of recurrent dynamics.
+=========================================================
 
-The feedforward tools in this package pull back a metric through a map
-x -> f(x). For an RNN the interesting map is the **one-step update**
+The feedforward tools in :mod:`neuralgeom.geometry` pull back a metric through
+a map x -> f(x). For an RNN the relevant map is the **one-step update**
 
     h_{t+1} = F(h_t, x_t)
 
@@ -12,7 +12,7 @@ and there are two derivatives worth taking at every point of a trajectory:
     J^rec = dF/dh   (hidden x hidden)  — how the network's own state evolves
     J^inp = dF/dx   (hidden x input)   — how new evidence enters the state
 
-``J^rec`` is where memory lives: an eigenvalue of modulus ~1 is a direction
+``J^rec`` governs memory: an eigenvalue of modulus ~1 is a direction
 along which activity neither decays nor explodes, i.e. an integrator (a
 line attractor); |lambda| < 1 directions forget with time constant
 tau = -dt / log|lambda|. ``J^inp`` pulled back gives the metric that says
@@ -23,11 +23,11 @@ Contents
 --------
 recurrent_jacobian / input_jacobian    batched dF/dh, dF/dx along trajectories
 jacobian_spectrum                      complex eigenvalues + time constants
-state_pullback_metric                  g = J^T J of the update map (SPD tools)
+recurrent_update_pullback_metric                  g = J^T J of the update map (SPD tools)
 find_slow_points                       fixed / slow points (Sussillo & Barak)
 participation_ratio                    effective dimensionality of activity
 trajectory_subspaces                   per-condition subspaces for Grassmann
-readout_subspace / input_subspace      the decision plane and drive directions
+readout_subspace / input_subspace      the readout subspace and input directions
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ import torch
 from torch import Tensor
 
 
-from ..geometry.jacobian import batch_jacobian, pullback_metric  # noqa: E402
+from ..geometry.jacobian import batch_jacobian, euclidean_pullback_metric  # noqa: E402
 from ..geometry.grassmann import (grassmann_distance, principal_angles,  # noqa: E402
                           tangent_subspaces)
 
@@ -48,7 +48,7 @@ __all__ = [
     "recurrent_jacobian",
     "input_jacobian",
     "jacobian_spectrum",
-    "state_pullback_metric",
+    "recurrent_update_pullback_metric",
     "SlowPoints",
     "find_slow_points",
     "participation_ratio",
@@ -136,7 +136,7 @@ def jacobian_spectrum(J: Tensor, dt: float = 1.0
     return ev, mod, tau
 
 
-def state_pullback_metric(model, H: Tensor, X: Tensor, wrt: str = "h",
+def recurrent_update_pullback_metric(model, H: Tensor, X: Tensor, wrt: str = "h",
                           **kw) -> Tensor:
     """g = J^T J for the update map — feeds directly into spd_geometry.
 
@@ -197,7 +197,7 @@ def find_slow_points(model, x_const: Tensor, h_init: Tensor, *,
                      verbose: bool = False) -> SlowPoints:
     """Find fixed points and slow points of the autonomous dynamics.
 
-    Minimizes the kinetic energy  q(h) = 0.5 * ||F(h, x_const) - h||^2  from
+    Minimizes the speed objective  q(h) = 0.5 * ||F(h, x_const) - h||^2  from
     many initial conditions (typically states sampled from real trajectories,
     which is what makes the search find the points the network actually uses).
 
@@ -313,5 +313,5 @@ def subspace_alignment(Q1: Tensor, Q2: Tensor) -> Dict[str, float]:
     return {
         "principal_angles_deg": [float(a) for a in torch.rad2deg(th)],
         "geodesic_distance": float(grassmann_distance(Q1, Q2)),
-        "mean_cos2": float(th.cos().square().mean()),
+        "mean_squared_cosine": float(th.cos().square().mean()),
     }

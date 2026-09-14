@@ -40,7 +40,7 @@ import torch.nn as nn
 from demo_common import (banner, decision_background, input_grid,
                          make_classifier, savefig, scatter_data,
                          train_classifier, two_moons)
-from neuralgeom.geometry.grassmann import (FeatureExtractor, GrassmannGeometry,
+from neuralgeom.geometry.grassmann import (FeatureExtractor, ModelSubspaceGeometry,
                           grassmann_distance, grassmann_log,
                           grassmann_frechet_mean, pairwise_grassmann_distance,
                           principal_angles, tangent_subspaces)

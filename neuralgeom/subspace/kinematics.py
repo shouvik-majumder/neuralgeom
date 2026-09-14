@@ -3,35 +3,37 @@ neuralgeom.subspace.kinematics — Riemannian kinematics of a subspace trajector
 ================================================================================
 
 Given a Grassmannian trajectory (frames from :mod:`neuralgeom.subspace.embed`),
-describe how the subspace *moves*, intrinsically, using the manifold's own
-log/exp/parallel-transport. Two layers, both ported from ProjectiveSpaceModels
-(Steps 4 and 4b):
+describe how the subspace moves, intrinsically, using the manifold's own
+log / exp / parallel-transport maps.
 
 Basic kinematics (:func:`compute_kinematics`)
     velocity      ``v_t = Log_{P_t}(P_{t+1}) / Δt``      (tangent at P_t)
     speed         ``‖v_t‖ = dist(P_t, P_{t+1}) / Δt``
-    acceleration  ``a_t = [v_t − PT_{t-1→t}(v_{t-1})] / Δt``  (covariant; 0 on a
-                  geodesic, so ``‖a_t‖`` measures how the subspace *curves*)
+    acceleration  ``a_t = [v_t − PT_{t-1→t}(v_{t-1})] / Δt``  (covariant; zero
+                  along a geodesic, so ``‖a_t‖`` measures how the path bends)
     curvature     ``κ_t = ‖a_⊥‖ / speed²``
-    efficiency    ``endpoint_dist / path_len``
+    endpoint_to_path_length_ratio
+                  ``endpoint_distance / path_length``: 1 for a geodesic segment,
+                  → 0 for a closed orbit
 
-Richer kinematics
-    :func:`karcher_mean`          Fréchet mean on the manifold (iterated log/exp)
-    :func:`tangent_pca`           "Grassmannian PCA": log-map to the Karcher-mean
-                                  tangent space, PCA ⇒ modes of subspace variation
-                                  + explained variance ⇒ intrinsic dimensionality
-    :func:`chordal_geodesic`      chordal ``√Σsin²θ`` vs geodesic ``√Σθ²`` scatter
-    :func:`transported_velocities` velocity field parallel-transported to the
-                                  Karcher mean for a comparable tangent-plane flow
+Further tools
+    :func:`karcher_mean`            Fréchet (Karcher) mean on the manifold
+    :func:`tangent_pca`             tangent PCA (principal geodesic analysis):
+                                    log-map to the Karcher-mean tangent space,
+                                    then PCA ⇒ modes of subspace variation and
+                                    an intrinsic-dimensionality estimate
+    :func:`chordal_vs_geodesic`     sampled chordal ``√Σsin²θ`` vs geodesic
+                                    ``√Σθ²`` distances between frames
+    :func:`transported_velocities`  velocity field parallel-transported to the
+                                    Karcher mean, in the top-2 tangent-PCA basis
 
-Manifold-agnostic by construction
-----------------------------------
-Every routine calls **only** the :ref:`Manifold interface` methods
-(``dist``/``log``/``exp``/``norm``/``inner_product``/``parallel_transport``), so
-the same code runs on the Grassmannian (default —
+Manifold interface
+------------------
+Every routine calls only ``dist``, ``log``, ``exp``, ``norm``,
+``inner_product`` and ``parallel_transport`` on the ``manifold`` argument, so
+the same code runs on the Grassmannian (default,
 :class:`~neuralgeom.geometry.grassmann.GrassmannManifold`) or on any other
-manifold implementing that interface (e.g. an SPD covariance manifold — the
-planned companion lens). Pass your own ``manifold=`` to reuse it elsewhere.
+Riemannian manifold exposing those six methods.
 """
 from __future__ import annotations
 
@@ -44,7 +46,7 @@ from ..geometry.grassmann import (GrassmannManifold, frame_to_projector,
                                    frame_principal_angles)
 
 __all__ = ["KinConfig", "compute_kinematics", "karcher_mean", "tangent_pca",
-           "chordal_geodesic", "transported_velocities"]
+           "chordal_vs_geodesic", "transported_velocities"]
 
 
 @dataclass
@@ -86,8 +88,9 @@ def compute_kinematics(frames: np.ndarray, win_times: np.ndarray,
                 parallel_transport (default: Grassmannian on Gr(N, k)).
 
     Returns a dict of per-time arrays (NaN where undefined at the ends) plus the
-    global summaries ``path_len``, ``endpoint_dist``, ``efficiency``, ``dt``.
-    Identity check used by the tests: ``speed · dt == step_dist``.
+    global summaries ``path_length``, ``endpoint_distance``,
+    ``endpoint_to_path_length_ratio`` and ``dt``. Identity used by the tests:
+    ``speed · dt == step_distance``.
     """
     cfg = cfg or KinConfig()
     frames = np.asarray(frames, float)
@@ -98,17 +101,17 @@ def compute_kinematics(frames: np.ndarray, win_times: np.ndarray,
 
     V = np.full((M, N, N), np.nan)
     speed = np.full(M, np.nan)
-    step_dist = np.full(M, np.nan)
+    step_distance = np.full(M, np.nan)
     for t in range(M - 1):
         v = man.log(P[t + 1], P[t]) / dt
         V[t] = v
         speed[t] = man.norm(v, P[t])
-        step_dist[t] = man.dist(P[t], P[t + 1])
+        step_distance[t] = man.dist(P[t], P[t + 1])
 
     if cfg.smooth > 1:
         V = _moving_average(V, cfg.smooth)
 
-    acc_mag = np.full(M, np.nan)
+    acceleration_norm = np.full(M, np.nan)
     curvature = np.full(M, np.nan)
     for t in range(1, M - 1):
         if cfg.accel == "covariant":
@@ -116,7 +119,7 @@ def compute_kinematics(frames: np.ndarray, win_times: np.ndarray,
             a = (V[t] - v_prev) / dt
         else:
             a = (V[t] - V[t - 1]) / dt
-        acc_mag[t] = man.norm(a, P[t])
+        acceleration_norm[t] = man.norm(a, P[t])
         s = speed[t]
         if s > 1e-9:
             vhat = V[t] / s
@@ -124,14 +127,14 @@ def compute_kinematics(frames: np.ndarray, win_times: np.ndarray,
             a_perp = a - a_par
             curvature[t] = man.norm(a_perp, P[t]) / (s ** 2)
 
-    path_len = float(np.nansum(step_dist))
-    endpoint_dist = man.dist(P[0], P[-1])
+    path_length = float(np.nansum(step_distance))
+    endpoint_distance = man.dist(P[0], P[-1])
     return {
         "time": np.asarray(win_times, float),
-        "speed": speed, "step_dist": step_dist,
-        "acc_mag": acc_mag, "curvature": curvature,
-        "path_len": path_len, "endpoint_dist": endpoint_dist,
-        "efficiency": endpoint_dist / (path_len + 1e-12), "dt": dt,
+        "speed": speed, "step_distance": step_distance,
+        "acceleration_norm": acceleration_norm, "curvature": curvature,
+        "path_length": path_length, "endpoint_distance": endpoint_distance,
+        "endpoint_to_path_length_ratio": endpoint_distance / (path_length + 1e-12), "dt": dt,
     }
 
 
@@ -156,8 +159,8 @@ def karcher_mean(projectors, manifold=None, iters: int = 30, tol: float = 1e-9):
 
 
 def tangent_pca(frames: np.ndarray, manifold=None, n_comp: int = 6) -> dict:
-    """"Grassmannian PCA": log-map frames to the Karcher-mean tangent space and
-    PCA the tangent vectors.
+    """Tangent PCA (principal geodesic analysis): log-map the frames to the
+    Karcher-mean tangent space and run PCA on the tangent vectors.
 
     Returns a dict with the mean projector ``mean``, per-frame PCA ``coords``
     (n, n_comp), the explained-variance ratio ``evr``, its cumulative sum
@@ -177,7 +180,7 @@ def tangent_pca(frames: np.ndarray, manifold=None, n_comp: int = 6) -> dict:
                 cum_evr=np.cumsum(evr), P=P)
 
 
-def chordal_geodesic(frames: np.ndarray, max_pairs: int = 4000, seed: int = 0):
+def chordal_vs_geodesic(frames: np.ndarray, max_pairs: int = 4000, seed: int = 0):
     """Sampled ``(geodesic arc-length, chordal)`` distance pairs between frames,
     to show where the small-angle chordal approximation departs from the true
     geodesic. Returns two 1-D arrays ``(geo, cho)``."""

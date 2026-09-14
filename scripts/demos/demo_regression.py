@@ -42,9 +42,9 @@ import torch.nn as nn
 
 from demo_common import banner, savefig
 from neuralgeom.geometry.jacobian import (batch_jacobian, log_volume_element,
-                             metric_spectrum, pullback_metric, volume_element)
+                             metric_spectrum, euclidean_pullback_metric, volume_element)
 from neuralgeom.geometry.grassmann import grassmann_distance, tangent_subspaces
-from neuralgeom.geometry.spd import (MetricFieldGeometry, affine_invariant_distance,
+from neuralgeom.geometry.spd import (ModelMetricFieldGeometry, affine_invariant_distance,
                           psd_fixed_rank_distance, regularize)
 
 torch.manual_seed(1)
@@ -107,7 +107,7 @@ savefig(fig, "rg_step0_fit.png")
 # --------------------------------------------------------------------------- #
 banner("Step 1", "Regression geometry is rank-1 BY CONSTRUCTION: "
        "g = grad f grad f^T")
-g5 = pullback_metric(model, P_in[:3])
+g5 = euclidean_pullback_metric(model, P_in[:3])
 w = torch.linalg.eigvalsh(g5)
 print("  eigenvalues of g at 3 points (one is always ~0):")
 for i in range(3):
@@ -202,7 +202,7 @@ banner("Step 4", "Comparing rank-1 metrics honestly: fixed-rank PSD transect")
 tt = torch.linspace(0, 1, 60).unsqueeze(1)
 a, b = torch.tensor([-1.3, -1.3]), torch.tensor([1.3, 1.3])
 path = a + tt * (b - a)
-geo = MetricFieldGeometry(model)
+geo = ModelMetricFieldGeometry(model)
 G_path = geo.metrics(path)
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")

@@ -1,5 +1,5 @@
 """
-Demo 1 — pullback_metric: the metric tensor field of a trained classifier.
+Demo 1 — the pullback metric tensor field of a trained classifier.
 ===========================================================================
 
 Pipeline (each step saves a figure to outputs/figures/):
@@ -37,9 +37,9 @@ import torch.nn as nn
 from demo_common import (banner, decision_background, input_grid,
                          make_classifier, metric_ellipse, savefig,
                          scatter_data, train_classifier, two_moons)
-from neuralgeom.geometry.jacobian import (PullbackGeometry, batch_jacobian,
+from neuralgeom.geometry.jacobian import (ModelPullbackGeometry, batch_jacobian,
                              log_volume_element, metric_spectrum,
-                             pullback_metric, volume_element)
+                             euclidean_pullback_metric, volume_element)
 
 # --------------------------------------------------------------------------- #
 banner("Step 0", "Raw data and trained model (two moons, 2->32->32->2 Tanh net)")
@@ -59,7 +59,7 @@ savefig(fig, "pb_step0_data_and_model.png")
 
 # --------------------------------------------------------------------------- #
 banner("Step 1", "Raw objects: Jacobians J_x (2x2 here) and metrics g = J^T J")
-geom = PullbackGeometry(model)
+geom = ModelPullbackGeometry(model)
 J = geom.jacobian(X[:5])
 g = geom.metric(X[:5])
 print("  J shape:", tuple(J.shape), " g shape:", tuple(g.shape))
@@ -93,7 +93,7 @@ print(f"  log-vol range: [{logvol.min():.1f}, {logvol.max():.1f}]  "
 # --------------------------------------------------------------------------- #
 banner("Step 3", "Tissot ellipses: image of a unit circle under J at grid points")
 Pc, GXc, GYc = input_grid(X, 14)
-gc = pullback_metric(model, Pc)
+gc = euclidean_pullback_metric(model, Pc)
 smax = torch.linalg.eigvalsh(gc)[:, -1].sqrt()
 
 fig, ax = plt.subplots(figsize=(6.4, 5.2), constrained_layout=True)
@@ -200,6 +200,6 @@ print("      undefined, so curvature-style quantities are meaningless there.")
 
 print("\n(5d) This module is POINTWISE. It does not compute geodesics, exp/log")
 print("     maps, or curvature of the input manifold — bridge to geomstats via")
-print("     PullbackGeometry.as_geomstats_metric(dim) for that machinery.")
+print("     ModelPullbackGeometry.as_geomstats_metric(dim) for that machinery.")
 
 print("\nDone. Figures in", "outputs/figures/")

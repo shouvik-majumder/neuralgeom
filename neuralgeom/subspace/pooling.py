@@ -2,25 +2,28 @@
 neuralgeom.subspace.pooling — pool subspace frames across trials.
 =================================================================
 
-Kinematics (:mod:`neuralgeom.subspace.kinematics`) are single-trial; some
-structure only appears *across* trials (e.g. a ring's settling loop lives in the
-across-trial cloud, not within one trajectory). This module pools the
-Grassmannian frames of every trial of a
-:class:`~neuralgeom.data.trajectory.Trajectory` into one point cloud, optionally
-subsampled, and attaches per-frame scalar fields used by the DEC layer and as
-colourings elsewhere:
+Kinematics (:mod:`neuralgeom.subspace.kinematics`) are computed per trial;
+some structure only appears across trials (for example, a ring attractor
+whose bump settles at a different angle on every trial fills the ring only in
+the across-trial ensemble). This module pools the Grassmannian frames of every
+trial of a :class:`~neuralgeom.data.trajectory.Trajectory` into one point
+cloud, optionally subsampled, and attaches per-frame scalar fields used by the
+DEC layer and as colourings elsewhere:
 
-    energy       instantaneous state energy  ``mean_i x_i(t)²``
-    speed        Riemannian subspace speed ``dist(P_t, P_{t+1})/Δt``
-    part_ratio   participation ratio of the window (effective dimensionality)
-    input_drive  drive at the window centre (from ``inputs`` if present, else
-                 reconstructed from the generator config/onsets — see below)
-    selfcapture  ``‖Uᵀx‖² / ‖x‖²`` = fraction of state energy the frame captures
-                 (= 1 − chordal_dist² to the state)
+    mean_squared_activity  ``mean_i x_i(t)²`` at the window centre
+    speed                  Riemannian subspace speed ``dist(P_t, P_{t+1})/Δt``
+    participation_ratio    participation ratio of the window covariance
+                           (effective dimensionality)
+    input_magnitude        mean absolute input at the window centre (from
+                           ``inputs`` if present, otherwise reconstructed from
+                           the generator configuration; see
+                           :func:`input_magnitude_at`)
+    variance_explained     ``‖Uᵀx‖² / ‖x‖²``, the fraction of the state's
+                           squared norm explained by the window's own subspace
+                           (``cos²`` of the angle between ``x`` and the frame)
 
-This logic was factored out of the original ProjectiveSpaceModels DEC module so
-that the topology layer (persistent homology on the pooled cloud) does not
-depend on the optional DEC/``dxtr`` extra.
+Pooling lives here rather than in the topology package so that persistent
+homology on the pooled cloud does not depend on the optional DEC extra.
 """
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ import numpy as np
 from ..geometry.grassmann import frame_distance
 from .embed import EmbedConfig, embed_trajectory
 
-__all__ = ["PoolConfig", "pool_frames", "reconstruct_drive"]
+__all__ = ["PoolConfig", "pool_frames", "input_magnitude_at"]
 
 
 @dataclass
@@ -53,14 +56,14 @@ class PoolConfig:
     fields: bool = True
 
 
-def reconstruct_drive(traj, trial, t_center, inputs_trial=None) -> float:
-    """Scalar input-drive at time ``t_center`` for one trial.
+def input_magnitude_at(traj, trial, t_center, inputs_trial=None) -> float:
+    """Scalar input magnitude at time ``t_center`` for one trial.
 
-    Prefers the explicit ``inputs`` tensor if the trajectory carries one (mean
-    absolute drive across units at that time); otherwise reconstructs from the
-    generator's config + per-trial onset/phase stored in ``meta``/``aux`` — the
-    original ProjectiveSpaceModels behaviour (bump phase for a moving ring, pulse
-    amplitude within the pulse window, else 0).
+    Uses the explicit ``inputs`` tensor if the trajectory carries one (mean
+    absolute input across units at that time). Otherwise the value is
+    reconstructed from the generator configuration and the per-trial
+    onset / phase stored in ``meta`` / ``aux``: the bump phase for a moving
+    ring, the pulse amplitude inside the pulse window, and 0 elsewhere.
     """
     if inputs_trial is not None:
         idx = int(np.argmin(np.abs(np.asarray(traj.time) - t_center)))
@@ -68,7 +71,7 @@ def reconstruct_drive(traj, trial, t_center, inputs_trial=None) -> float:
 
     cfg = traj.meta.get("config", {}) if isinstance(traj.meta, dict) else {}
     conn = cfg.get("connectivity", "")
-    if conn == "ring" and cfg.get("ring_moving", False):
+    if conn == "ring" and cfg.get("ring_rotating", False):
         phi0 = float(traj.aux.get("phi0", np.zeros(traj.n_trials))[trial])
         omega = float(traj.meta.get("omega", 0.0) or 0.0)
         return float((phi0 + omega * t_center) % (2 * np.pi))
@@ -95,7 +98,8 @@ def pool_frames(traj, cfg: PoolConfig = None):
                           center=emb_cfg.center, metric=emb_cfg.metric)
 
     time = np.asarray(traj.time)
-    field_names = ["energy", "speed", "part_ratio", "input_drive", "selfcapture"]
+    field_names = ["mean_squared_activity", "speed", "participation_ratio",
+                   "input_magnitude", "variance_explained"]
     frames = []
     fields = {n: [] for n in field_names} if cfg.fields else {}
 
@@ -111,7 +115,7 @@ def pool_frames(traj, cfg: PoolConfig = None):
             dt = float(np.mean(np.diff(tcen))) if len(tcen) > 1 else 1.0
             speed = np.full(len(F), np.nan)
             for m in range(len(F) - 1):
-                speed[m] = frame_distance(F[m], F[m + 1], "canonical") / dt
+                speed[m] = frame_distance(F[m], F[m + 1], "sqrt2_principal_angle") / dt
 
         for m in range(len(F)):
             frames.append(F[m])
@@ -125,12 +129,12 @@ def pool_frames(traj, cfg: PoolConfig = None):
             Wc = Wd - Wd.mean(0, keepdims=True)
             ev = np.clip(np.linalg.eigvalsh(Wc.T @ Wc / Wd.shape[0]), 0, None)
             pr = (ev.sum() ** 2) / (np.sum(ev ** 2) + 1e-12)
-            fields["energy"].append(float(np.mean(x ** 2)))
+            fields["mean_squared_activity"].append(float(np.mean(x ** 2)))
             fields["speed"].append(float(speed[m]))
-            fields["part_ratio"].append(float(pr))
-            fields["input_drive"].append(
-                reconstruct_drive(traj, tr, tcen[m], inputs_tr))
-            fields["selfcapture"].append(proj2 / nx2)
+            fields["participation_ratio"].append(float(pr))
+            fields["input_magnitude"].append(
+                input_magnitude_at(traj, tr, tcen[m], inputs_tr))
+            fields["variance_explained"].append(proj2 / nx2)
 
     frames = np.array(frames)
     fields = {n: np.array(v) for n, v in fields.items()}

@@ -1,19 +1,14 @@
 """
-neuralgeom.data.trajectory — the unified Trajectory contract (the spine).
-=========================================================================
+neuralgeom.data.trajectory — the shared Trajectory object and its HDF5 schema.
+==============================================================================
 
-Both halves of ``neuralgeom`` ultimately consume the *same* object: a batch of
+Every analysis in ``neuralgeom`` consumes the same object: a batch of
 high-dimensional state trajectories with enough provenance to interpret them.
-The pullback / dynamics side (``neuralgeom.dynamics``, ``neuralgeom.geometry``)
-grew up around the recording-oriented :class:`~neuralgeom.data.loader.Session`;
-the subspace / topology side (``neuralgeom.subspace``, ``neuralgeom.topology``)
-grew up around a small HDF5 schema emitted by an RNN generator. This module is
-the agreed interchange between them — the "trajectory contract" proposed in the
-ProjectiveSpaceModels handoff (§D.1) — so a generator, a recording loader, and
-every analysis all speak one vocabulary.
+This module defines that object and its HDF5 schema, so a synthetic generator,
+a recording loader, a trained network and every analysis exchange one format.
 
-The contract
-------------
+Fields
+------
 A :class:`Trajectory` bundles::
 
     X          : (n_trials, T, N)      REQUIRED   hidden / pre-activation states
@@ -68,13 +63,13 @@ __all__ = [
 
 
 # --------------------------------------------------------------------------- #
-# The contract object
+# The Trajectory object
 # --------------------------------------------------------------------------- #
 @dataclass
 class Trajectory:
     """A batch of state trajectories plus provenance — the common interchange.
 
-    See the module docstring for the field contract. ``X`` and ``time`` are
+    See the module docstring for the field list. ``X`` and ``time`` are
     required; ``dt`` is inferred from ``time`` if not given; ``meta`` always
     carries at least a ``generator`` key so an analysis can report where the
     data came from.
@@ -163,7 +158,7 @@ class Trajectory:
         ``config`` and any of ``onsets``/``phi0``/``omega`` (folded into
         ``aux``/``meta``). This is how the subspace RNN generator
         (:mod:`neuralgeom.synth.subspace_rnn`) and the attractor/low-rank
-        generators enter the contract.
+        generators are converted.
         """
         d = dict(d)
         X = np.asarray(d["X"], float)
@@ -248,7 +243,7 @@ def load_trajectory(path: str) -> Trajectory:
     """Read a :class:`Trajectory` from HDF5.
 
     Handles both the canonical schema written by :meth:`Trajectory.save` and the
-    legacy ``rnn_{tag}.h5`` schema from ProjectiveSpaceModels (which stores
+    legacy ``rnn_{tag}.h5`` schema of earlier RNN generators (which stores
     ``onsets``/``phi0``/``omega`` and the config as loose attributes) — legacy
     extras are folded into ``aux``/``meta`` so old datasets load unchanged.
     """

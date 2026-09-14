@@ -2,7 +2,7 @@
 
 A single container for population activity from *any* source -- recorded neurons or a
 task-trained RNN -- so the same analysis code runs on both. The layout deliberately
-matches the RNN-geometry pipeline's HDF5 contract (`X (n_trials, T, N)`, `time (T,)`,
+matches the Trajectory HDF5 schema (`X (n_trials, T, N)`, `time (T,)`,
 `inputs`, connectivity) while also exposing the neuroscience-conventional
 neuron x time x trial view.
 

@@ -2,8 +2,7 @@
 neuralgeom.synth.subspace_rnn — connectivity-family rate RNNs (the subspace testbed).
 =====================================================================================
 
-Ported from the ProjectiveSpaceModels ``rnn_generator`` (Step 2 of its
-pipeline). Simulates high-dimensional hidden-state trajectories of a
+Simulates high-dimensional hidden-state trajectories of a
 continuous-time (rate) recurrent network::
 
         τ ẋ = −x + W · tanh(x) + I(t) + noise
@@ -13,17 +12,18 @@ subspace-embedding, kinematics and topology analyses (:mod:`neuralgeom.subspace`
 :mod:`neuralgeom.topology`) consume it exactly like a recording or a trained
 network. This is a *testbed*: three connectivity families × two dynamical
 regimes give data whose subspace geometry and topology are known in advance, so
-the pipeline can be validated before it is trusted on unknown data.
+the pipeline can be validated before it is applied to data with unknown
+structure.
 
 Why it lives beside ``lowrank_rnn`` rather than replacing it
 ------------------------------------------------------------
 ``neuralgeom.synth.lowrank_rnn`` already provides a low-rank rate RNN aimed at
 the *pullback / dynamics* estimators (it emits a
-:class:`~neuralgeom.data.trial_data.TrialData`). This generator is a different
-instrument: three connectivity families (``random`` chaotic, ``lowrank``
-point/rotation, ``ring`` attractor) and two regimes (``settling`` / ``moving``)
-chosen to exercise the *subspace-geometry / topology* lens (loops on the
-Grassmannian, ℝP¹ structure, reliability failures). Its config class is named
+:class:`~neuralgeom.data.trial_data.TrialData`). This generator serves a
+different purpose: three connectivity families (``random`` chaotic, ``lowrank``
+point/rotation, ``ring`` attractor) and two regimes (``stationary`` / ``rotating``)
+chosen to exercise the subspace / topology analyses (loops on the
+Grassmannian, ℝP¹ structure, regimes with a small singular-value gap). Its config class is named
 :class:`SubspaceRNNConfig` to avoid colliding with ``lowrank_rnn.RNNConfig``.
 
 Connectivity families
@@ -34,7 +34,7 @@ Connectivity families
   radius is exactly ``lowrank_gain`` (not ~1/√N), so dynamics are genuinely
   low-rank-driven and confined to span(M).
 * ``ring``    — cosine kernel ``W_ij = (J1/N) cos(θ_i − θ_j)``, itself rank-2 —
-  a structural bridge to the low-rank case; a continuous ring attractor.
+  so itself a low-rank network; a continuous ring attractor.
 
 Integration is fixed-step RK4 when ``noise_std == 0`` and Euler–Maruyama when
 ``noise_std > 0`` (default 0.3). Only ``numpy`` is required.
@@ -96,7 +96,7 @@ class SubspaceRNNConfig:
     # --- ring connectivity ---
     ring_J1: float = 4.0                   # cosine kernel amplitude
     ring_J0: float = 0.0                   # uniform component
-    ring_moving: bool = False              # rotating stimulus bump ⇒ single-trial loop
+    ring_rotating: bool = False              # rotating stimulus bump ⇒ single-trial loop
     ring_stim_amp: float = 1.0
     ring_revolutions: float = 1.0
 
@@ -195,7 +195,7 @@ def build_trial_input(cfg: SubspaceRNNConfig, rng, aux: dict, b: Optional[np.nda
 
     * pulse (random/lowrank): rectangular ``pulse_amp·b`` over
       ``[onset, onset + pulse_dur]``, onset ~ U(pulse_onset_range).
-    * moving ring: a cosine bump ``A·cos(θ − φ(t))`` rotating at
+    * rotating ring: a cosine bump ``A·cos(θ − φ(t))`` rotating at
       ``ω = 2π·revolutions/duration`` from a random initial phase φ₀.
     * otherwise: zeros.
     """
@@ -204,7 +204,7 @@ def build_trial_input(cfg: SubspaceRNNConfig, rng, aux: dict, b: Optional[np.nda
     I = np.zeros((T, N))
     info: dict = {"onset": np.nan, "phi0": np.nan, "omega": np.nan}
 
-    if cfg.connectivity == "ring" and cfg.ring_moving:
+    if cfg.connectivity == "ring" and cfg.ring_rotating:
         theta = aux["theta"]
         phi0 = rng.uniform(0.0, 2 * np.pi)
         omega = 2 * np.pi * cfg.ring_revolutions / cfg.duration
@@ -262,7 +262,7 @@ def simulate_trial(cfg: SubspaceRNNConfig, W, I, x0, rng) -> np.ndarray:
 # Dataset generation
 # --------------------------------------------------------------------------- #
 def make_dataset(cfg: SubspaceRNNConfig) -> dict:
-    """Generate the full dataset as a plain dict (the pre-contract form).
+    """Generate the full dataset as a plain dict (before wrapping in a Trajectory).
 
     Keys: ``X`` (n_trials, T, N), ``inputs`` (n_trials, T, N), ``onsets``,
     ``phi0``, ``omega``, ``W``, ``b``, ``aux``, ``time``, ``config``. Prefer
@@ -306,7 +306,7 @@ def make_dataset(cfg: SubspaceRNNConfig) -> dict:
 
 
 def make_trajectory(cfg: SubspaceRNNConfig) -> Trajectory:
-    """Generate a dataset and return it as a :class:`Trajectory` (the contract).
+    """Generate a dataset and return it as a :class:`Trajectory`.
 
     The per-trial input current is kept as ``Trajectory.inputs``; ``W`` and the
     connectivity-specific extras (loadings ``m``, generator ``G``, ring angles
@@ -332,21 +332,22 @@ def population_vector_angle(X_final: np.ndarray, theta: np.ndarray) -> np.ndarra
 def build_specs(regime: str) -> dict:
     """Return ``{name: SubspaceRNNConfig}`` for the three families in a regime.
 
-    ``regime="settling"``: symmetric low-rank + static-bump ring (point
-    attractors). ``regime="moving"``: rotation low-rank + rotating-stimulus ring
-    (genuinely 2-D single-trial loops; reliable k=2).
+    ``regime="stationary"``: symmetric low-rank connectivity and a ring with a
+    static stimulus bump (the state converges to a fixed point).
+    ``regime="rotating"``: rotational low-rank connectivity and a ring with a
+    rotating stimulus bump (the subspace traces a loop within each trial).
     """
     random_cfg = SubspaceRNNConfig(connectivity="random", n_trials=30, seed=1)
-    if regime == "settling":
+    if regime == "stationary":
         lowrank_cfg = SubspaceRNNConfig(connectivity="lowrank", n_trials=30, rank=2,
                                         lowrank_mode="symmetric", seed=2)
         ring_cfg = SubspaceRNNConfig(connectivity="ring", n_trials=60,
-                                     ring_moving=False, seed=3)
-    elif regime == "moving":
+                                     ring_rotating=False, seed=3)
+    elif regime == "rotating":
         lowrank_cfg = SubspaceRNNConfig(connectivity="lowrank", n_trials=30, rank=2,
                                         lowrank_mode="rotation", lowrank_rot_angle=0.5,
                                         seed=2)
-        ring_cfg = SubspaceRNNConfig(connectivity="ring", n_trials=60, ring_moving=True,
+        ring_cfg = SubspaceRNNConfig(connectivity="ring", n_trials=60, ring_rotating=True,
                                      ring_revolutions=1.0, ring_stim_amp=1.0, seed=3)
     else:
         raise ValueError(regime)
