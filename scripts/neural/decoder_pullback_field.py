@@ -1,12 +1,10 @@
 """
-STAGE 3b — ONE decoder over all time bins: a pullback metric FIELD.
-===================================================================
+decoder_pullback_field.py — pullback metric field of a time-to-lick decoder.
+============================================================================
 
-WHY THIS IS BETTER THAN STAGE 3
---------------------------------
-Stage 3 fitted a separate decoder at each time bin, giving one gradient per
-bin. That wastes data and cannot express how the geometry varies WITHIN the
-state space. Here a SINGLE map is fitted over all (trial, time-bin) pairs:
+The map
+-------
+A single decoder is fitted over all (trial, time-bin) pairs:
 
         f :  neural state h  ->  TIME REMAINING UNTIL THE LICK  (seconds)
 
@@ -19,15 +17,15 @@ population visits, not one value per time bin. That is exactly the object the
 pullback-metric machinery is built for, and it can be drawn on the state
 space (see the quiver panel).
 
-TARGET DEFINITION
------------------
+Target
+------
 time_to_lick(i, t) = lick_time_i - t     (seconds, always > 0 in epoch A)
 
 The network sees ONLY the neural state, never t, so it cannot read the answer
 off the clock; it must infer remaining time from population activity.
 
-THE CROSS-VALIDATION PROBLEM, AND HOW IT IS HANDLED
-----------------------------------------------------
+Cross-validation
+----------------
 Time bins within one trial are strongly correlated (they are a smoothed
 trajectory). If folds were split over SAMPLES, bins from the same trial would
 appear in both train and test and R^2 would be inflated by memorising trials
@@ -35,12 +33,11 @@ rather than learning the map. Therefore:
 
   * folds are split BY TRIAL — every bin of a trial is in the same fold;
   * the REDUCER (PCA) is fit inside each fold on training trials only, so
-    test trials never influence the coordinate system either (this was a
-    leak in Stage 3, where PCA saw all trials);
+    test trials never influence the coordinate system either;
   * predictions, R^2 and all Jacobians are out-of-fold.
 
-NULLS (all with the identical pipeline)
----------------------------------------
+Null controls (identical pipeline)
+----------------------------------
   N1 shuffled lick times   permute lick_time across trials, keeping each
                            trial's activity and its internal time structure
                            intact. Breaks the state->behaviour link only.
@@ -51,7 +48,7 @@ NULLS (all with the identical pipeline)
                            weaker, more conservative null that preserves the
                            marginal distribution of targets exactly.
 
-Run:  python stage3b_pooled_decoder.py [SESSION] [A|B]
+Run:  python scripts/neural/decoder_pullback_field.py [SESSION] [A|B]
 """
 from __future__ import annotations
 
@@ -79,7 +76,7 @@ from neuralgeom.geometry.jacobian import batch_jacobian                  # noqa:
 SESSION = sys.argv[1] if len(sys.argv) > 1 else "SM239_20230302_g0"
 EPOCH = "B" if "B" in sys.argv[1:] else "A"
 WINDOW, KDEF, NFOLD, STEPS = 0.20, 10, 5, 200
-FIG = fig_dir("neural_stage3b")
+FIG = fig_dir("neural")
 torch.set_default_dtype(torch.float64)
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 145, "font.size": 8,
                      "axes.titlesize": 8.5, "axes.labelsize": 8,
@@ -171,7 +168,7 @@ if EPOCH == "B":
 else:
     tg = s.t
 y = s.lick.astype(float)
-print(f"STAGE 3b — {SESSION} ({s_full.group}, day {s_full.training_day})  "
+print(f"decoder pullback field — {SESSION} ({s_full.group}, day {s_full.training_day})  "
       f"EPOCH {EPOCH}")
 print(f"  activity {Z.shape} -> {Z.shape[0]*Z.shape[1]} pooled (trial,bin) "
       f"samples; target = time to lick")
@@ -289,9 +286,9 @@ q = a.quiver(P[::step * 4, 0], P[::step * 4, 1],
 a.set_xlabel("PC1 of neural state"); a.set_ylabel("PC2")
 a.set_title("THE METRIC FIELD ON STATE SPACE\ncolour = sensitivity, arrows = "
             "$\\nabla f$ (decoding axis)")
-fig.suptitle(f"Stage 3b — pooled decoder f: state -> TIME TO LICK.  "
+fig.suptitle(f"Pooled decoder f: state -> TIME TO LICK.  "
              f"{SESSION} ({s_full.group}), EPOCH {EPOCH}, PCA k={KDEF} fit "
              f"within folds.  {Z.shape[0]} trials x {Z.shape[1]} bins = "
              f"{Z.shape[0]*Z.shape[1]} samples.", fontsize=9.5)
-save(fig, f"s3b_{EPOCH}_pooled_field.png")
+save(fig, f"decoder_field_{EPOCH}.png")
 print("\nDone.")

@@ -1,246 +1,72 @@
-# neuralgeom — geometry & topology of neural representations and dynamics
+# neuralgeom
 
-`neuralgeom` is a single, unified library that merges two exploratory research
-codebases into one consistent toolkit:
+**Differential geometry and topology of neural population activity.**
 
-* **PullbackMetric** (`pbgeom`) — the **pullback-metric / dynamics engine**. For
-  a differentiable map `f`, the pullback metric `g = Jᵀ M J` measures how `f`
-  distorts its domain (which directions are magnified, which collapse, how that
-  varies point to point), giving volume, anisotropy and curvature; plus
-  distances between metric tensors (SPD) and between subspaces (Grassmannian),
-  Fisher–Rao output metrics, recurrent-dynamics geometry, LDS estimators, and
-  cognitive-task RNN training.
-* **ProjectiveSpaceModels** — the **subspace / Grassmannian-trajectory + topology
-  lens**. Instead of the raw state `x(t) ∈ ℝᴺ`, track the *k-dimensional subspace*
-  the activity locally occupies as a point on the Grassmannian `Gr(k, N)`
-  (`Gr(1, N) = ℝPᴺ⁻¹`, real projective space), and study how that point *moves*
-  (Riemannian kinematics) and what shape its orbit traces (persistent homology).
+`neuralgeom` is a Python library for describing how neural representations and
+dynamics are organised geometrically. It provides three families of tools that
+operate on the same object, a batch of high-dimensional state trajectories from
+a recording, a simulation, or a trained network:
 
-They are two complementary views of the **same object** — a batch of
-high-dimensional neural state trajectories — and now share one data contract
-(`neuralgeom.data.Trajectory`) and one geometry layer.
+* **Pullback metrics.** For a differentiable map `f` (a decoder, a readout, or
+  the one-step update of a recurrent network), the pullback metric
+  `g = Jᵀ M J` measures how `f` distorts its domain: which directions are
+  magnified, which are collapsed, and how that varies from point to point.
+  From `g` follow local volume, anisotropy, curvature and geodesics.
+* **Subspace trajectories.** Instead of the raw state `x(t) ∈ ℝᴺ`, track the
+  `k`-dimensional subspace that the activity locally occupies as a point on the
+  Grassmannian `Gr(k, N)` (`Gr(1, N) = ℝPᴺ⁻¹`), and describe how that point
+  moves with Riemannian kinematics: speed, covariant acceleration, curvature,
+  Karcher mean, tangent PCA.
+* **Topology.** Persistent homology of the subspace trajectory, within a trial
+  and pooled across trials, with bottleneck distances between conditions and an
+  optional discrete-exterior-calculus layer.
 
-> Both codebases are exploratory: the library is a stable, tested substrate, not
-> a claim of conclusive results. Neither the Neuropixels recordings nor the
-> synthetic datasets the analyses were developed against are bundled here — see
-> "Working on this repo" at the end of this file for how to point the library at
-> your own copy.
+Alongside these are distances between metric tensors (SPD manifold) and between
+subspaces (Grassmannian), Fisher–Rao output metrics, estimators of linear
+dynamics from data, and utilities for synthetic data, cognitive tasks and RNN
+training.
 
-## The one idea (pullback lens) and the one move (subspace lens)
+> **Status.** This is an exploratory research package under active development.
+> The library is tested, but the analyses it supports are methods under
+> evaluation rather than established results, and the API may change between
+> versions. The recordings and datasets the methods were developed against are
+> not bundled.
 
-* **Pullback:** `rank(g) = dim(domain)`. Put a *scalar* behaviour in the codomain
-  and `g` is rank-1 (one direction, no volume/curvature); put a *low-dimensional
-  manifold in the domain* and the geometry becomes rich. Recurrent dynamics give
-  full-rank `g` for free.
-* **Subspace:** `k` is a *topological filter* — different `k` expose different
-  structure; a k-frame is only trustworthy where `σ_k/σ_{k+1} ≫ 1` (report
-  `sv_gap`); use uncentered windows (the occupied subspace) and 𝔽₂ coefficients
-  for homology (they expose projective/non-orientable structure).
+![architecture](docs/architecture.png)
 
-## Install
+## Motivation
 
-```bash
-pip install -e .                       # core engine (numpy<2, scipy, sklearn, torch, h5py, matplotlib)
-pip install -e '.[geom,topology]'      # + the subspace/topology lens (geomstats, ripser, persim)
-pip install -e '.[full]'               # + DEC (dxtr), reports (reportlab…), neurogym
-```
+Population activity is usually summarised by a linear projection and a
+Euclidean distance. Both choices are arbitrary, and many geometric statements
+about neural data depend on them. Two constructions make the geometry
+intrinsic:
 
-Or the conda environment: `conda env create -f environment.yml`.
+1. **A metric induced by the computation.** Pulling a codomain metric back
+   through a fitted map defines distances in state space by what the map
+   resolves, not by firing-rate scale. Since `rank(g) = dim(domain)`, placing a
+   low-dimensional manifold in the domain and the high-dimensional
+   representation in the codomain yields a full geometry (volume, anisotropy,
+   curvature), whereas a scalar decoder yields only a rank-1 metric.
+2. **A trajectory of subspaces.** Recurrence and periodicity of a computation
+   that are hard to see in the state trajectory can become explicit when the
+   *coding subspace* is tracked instead: a rotating coding direction traces a
+   closed curve on `ℝPᴺ⁻¹`, which persistent homology detects as an `H1`
+   feature without any embedding.
 
-**Dependency model — light core + optional extras.** The core is
-`numpy(<2)/scipy/scikit-learn/torch/h5py/matplotlib`. Everything else is an
-optional extra and is imported lazily with a clear install hint if missing, so
-`import neuralgeom` works with only the core:
+The library implements both constructions on one data object so that they can
+be applied, and compared, on the same activity.
 
-| extra | packages | enables |
-|---|---|---|
-| `geom` | geomstats | `GrassmannManifold` ⇒ all of `neuralgeom.subspace` kinematics + pooled topology |
-| `topology` | ripser, persim | persistent homology & bottleneck (`neuralgeom.topology`) |
-| `dec` | dxtr | discrete exterior calculus (`neuralgeom.topology.dec`) — *not* `pydec` |
-| `report` | reportlab, pillow, pypdf | PDF reports & dashboard (`neuralgeom.viz`) |
-| `neurogym` | neurogym, gymnasium | the neurogym task adapter |
+## Installation
 
-`numpy` is pinned `<2` because geomstats/ripser require it. **torch is core**
-(the pullback/dynamics engine cannot import without it) — this is a deliberate
-deviation from treating torch as an extra. The genuinely optional dependencies
-are imported lazily by the modules that need them and raise a clear install hint
-if absent, so `import neuralgeom` works with only the core installed.
-
-## Layout (modular, two levels deep)
-
-```
-neuralgeom/
-  geometry/      map-agnostic geometry toolbox
-    jacobian.py       feed-forward Jacobians, g = JᵀJ, volume, spectra (torch)
-    manifold.py       low-D domain: volume, anisotropy, curvature, whitening
-    pullback.py       PullbackMetric = ReadoutMap + OutputMetric → g(x)
-    riemann.py        RiemannianField: Christoffels, geodesics, curvature
-    output_metrics.py codomain metrics incl. Fisher–Rao families
-    maps.py, torch_readouts.py   readout maps with Jacobians
-    spd.py            distances/means between metric tensors (SPD & PSD)
-    grassmann.py      distances/means between subspaces — BOTH the torch
-                      model-facing API and the numpy/geomstats frame API
-                      (merged from the two repos)
-  subspace/      the subspace lens (manifold-agnostic)
-    embed.py          sliding-window Grassmannian frames + sv_gap reliability
-    kinematics.py     speed / covariant accel / curvature; Karcher mean;
-                      tangent-PCA; chordal-vs-geodesic; transported velocity
-    pooling.py        pool frames + scalar fields across trials
-  topology/      topology of subspace trajectories
-    persistence.py    persistent homology (𝔽₂) on distance matrices, bottleneck
-    dec.py            OPTIONAL discrete exterior calculus (dxtr) + cross-projection
-    direct.py         OPTIONAL direct state-manifold cross-check
-  dynamics/      measure AND estimate dynamics (rnn, lds, regression, torch_geometry)
-  data/          loader, adapters, reduce, conditions, features, trial_data,
-                 trajectory  ← the unified Trajectory contract
-  synth/         attractor, lowrank_rnn, fixtures, subspace_rnn (connectivity families)
-  tasks/         cognitive tasks + RNN training (the timing task now lives in
-                 its own repository — see "The timing task" below)
-  viz/  paths.py  fitting.py  stats.py
-
-scripts/   runnable analyses & demos (never imported by the package)
-tests/     numerical checks (51 tests: 27 engine + 24 subspace/topology/contract)
-docs/      formulation.tex, subspace_methods.tex (the formal mathematics)
-outputs/   generated artefacts: figures/{demos,rnn,neural}, pdf/, checkpoints/, cache/
-```
-
-## Quick start
-
-### The shared contract
-
-```python
-from neuralgeom.synth.subspace_rnn import SubspaceRNNConfig, make_trajectory
-
-cfg  = SubspaceRNNConfig(connectivity="ring", ring_moving=True, N=50, n_trials=8)
-traj = make_trajectory(cfg)          # a neuralgeom.data.Trajectory
-traj.save("ring_moving.h5")          # HDF5 round-trip
-# every analysis consumes this one object; adapters exist from raw arrays,
-# the other synth generators, and a recording Session (Trajectory.from_session)
-```
-
-### Subspace lens (Grassmannian trajectory → kinematics → topology)
-
-```python
-from neuralgeom.subspace import EmbedConfig, embed_from_trajectory, compute_kinematics, tangent_pca
-from neuralgeom.topology.persistence import single_trial_distances, ph, top_life
-
-emb = embed_from_trajectory(traj, trial=0, cfg=EmbedConfig(k=1, win=50, stride=10))
-kin = compute_kinematics(emb["frames"], emb["win_times"])   # speed, curvature, efficiency…
-tp  = tangent_pca(emb["frames"])                            # intrinsic dimensionality
-
-D   = single_trial_distances(traj, 0, EmbedConfig(k=1))     # geodesic distance matrix
-h1  = top_life(ph(D, maxdim=1)[1])                          # persistence of the loop (ℝP¹)
-```
-
-### Pullback lens (feed-forward and recurrent geometry)
-
-```python
-import torch, torch.nn as nn
-from neuralgeom.geometry import PullbackGeometry, spd_distance, grassmann_distance
-
-model = nn.Sequential(nn.Linear(3, 64), nn.Tanh(), nn.Linear(64, 10))
-geo = PullbackGeometry(model)
-X   = torch.randn(32, 3)
-vol = geo.volume_element(X)          # local volume magnification √det g
-
-from neuralgeom.tasks import make_task, make_model, train
-task  = make_task("context_decision", dt=25, seed=0)
-rnn   = make_model("vanilla", task.spec, hidden_size=96, dt=task.dt)
-train(rnn, task, steps=3000)         # then neuralgeom.dynamics for J_rec, fixed points, LDS…
-```
-
-## Worked examples (executed notebooks with plots)
-
-Two detailed, narrated notebooks work a single network end-to-end and explain what
-each quantity describes. Their outputs are stripped in version control (see
-"Working on this repo"), so run them to regenerate the plots:
-
-- `examples/example_ring_attractor.ipynb` — the **subspace/topology** lens on a
-  ring-attractor RNN (Grassmannian embedding → kinematics → persistent homology of
-  the ℝP¹ loop → DEC → cross-check).
-- `examples/example_task_trained_rnn.ipynb` — the **pullback/dynamics** lens on a
-  vanilla RNN **trained** on evidence integration (Jacobian spectra → line
-  attractor / slow points → state-space pullback metric → bridge to the subspace
-  lens).
-
-To re-run them, add a kernel: `pip install -e '.[notebook]'` (or `pip install
-ipykernel`) and pick the env's kernel in VS Code / Jupyter. See `examples/README.md`.
-
-## The timing task (a separate repository)
-
-The cue-triggered lick-timing task, the agents trained on it, and everything
-that trains them moved out of this package into
-[`timingtask`](../timingtask) — a standalone, separately installable
-repository that imports nothing from `neuralgeom`.
-
-The split is along the line between *producing* neural activity and
-*analysing* it. `timingtask` generates trials and trains agents; this package
-measures the geometry of what came out. They meet at ONE place, and it is a
-file rather than an import: `timingtask.export` writes the canonical
-`Trajectory` HDF5 schema defined in `neuralgeom/data/trajectory.py`, and
-`load_trajectory` reads it.
-
-```python
-# in the timing repo, after training
-from timingtask.export import save_trajectory
-save_trajectory(trainer.evaluate(model, n_trials=512, collect_states=True),
-                "runs/act_probe.h5", condition="delay")
-```
-
-```python
-# here, in the same conda environment
-from neuralgeom.data import load_trajectory
-traj = load_trajectory("runs/act_probe.h5")   # cue-aligned states + behaviour
-```
-
-From there it is an ordinary `Trajectory`: the subspace embedding, the
-persistent homology, the pullback metric of the dynamics and the fixed-point
-finder all take it unchanged. `traj.aux["n_steps"]` masks the NaN padding;
-`traj.condition` carries the required delay.
-
-`neuralgeom.tasks` keeps the four cognitive tasks (`cognitive.py`), the model
-zoo (`models.py`) and the supervised trainer (`training.py`); `timingtask`
-carries its own copies of the latter two so it stands alone.
-
-## Documentation
-
-| file | what it is |
-|---|---|
-| `README.md` | this — orientation, install, layout, quick start, per-machine setup |
-| `docs/formulation.tex` | the rigorous pullback-metric mathematics |
-| `docs/subspace_methods.tex` | formal definitions of the subspace/topology constructions (from ProjectiveSpaceModels) |
-| `../timingtask/docs/` | the timing task's formulation, model inventory and generated config reference |
-
-## Background
-
-Pullback lens: Zavatone-Veth et al. (*magnifying areas near decision
-boundaries*); Cayco-Gajic & Pellegrino (*geometry-aware similarity metrics*,
-the spectral-ratio SPD distance); Majumder et al. (the timing task & 2-attractor
-model). Subspace lens: low-rank RNN theory (Mastrogiuseppe & Ostojic; Beiran et
-al.), fixed-point reverse-engineering (Sussillo & Barak), and shared dynamical
-motifs (Driscoll et al.). Full reference lists are in the two `.tex` documents.
-
----
-
-## Working on this repo (once per machine)
-
-The repository lives on fast local disk; the recordings live on the lab
-network share. Three things are therefore machine-local and deliberately **not**
-tracked by git:
-
-**1. Where the data is.** Copy `data_dir.local.example` to `data_dir.local` and
-put the absolute path to the recordings directory in it (one line). Or set the
-`NEURALGEOM_DATA_DIR` environment variable, which takes precedence. Verify:
+Requires Python ≥ 3.10.
 
 ```bash
-python -c "from neuralgeom.paths import describe_paths; print(describe_paths())"
+pip install -e .                       # core: numpy<2, scipy, scikit-learn, torch, h5py, matplotlib
+pip install -e '.[geom,topology]'      # + Grassmannian geometry and persistent homology
+pip install -e '.[full]'               # + discrete exterior calculus and PDF reports
 ```
 
-That prints the resolved layout, whether `DATA_DIR` exists, how many `.h5`
-files it holds, and *which rule* produced the path — which is the fastest way
-to diagnose a "file not found" on a machine you have not used in a while.
-
-**2. The environment.**
+Or with conda:
 
 ```bash
 conda env create -f environment.yml
@@ -248,35 +74,203 @@ conda activate neuralgeom
 pip install -e .
 ```
 
-After any `conda install`, re-export and commit:
-`conda env export --from-history > environment.yml`. An `environment.yml` that
-has drifted out of date is worse than none, because it claims a reproducibility
-it does not deliver.
+The core is deliberately small. `torch` is a core dependency because the
+pullback-metric and dynamics tools are built on its autograd. Everything else
+is an optional extra, imported lazily with an explicit install hint, so
+`import neuralgeom` works with only the core installed.
 
-**3. The notebook output filter.** `.gitattributes` declares that `.ipynb`
-files pass through `nbstripout`, but the filter *definition* lives in
-`.git/config`, which is not tracked. So per clone:
+| extra | packages | enables |
+|---|---|---|
+| `geom` | geomstats | closed-form Grassmannian geometry; all of `neuralgeom.subspace` |
+| `topology` | ripser, persim | persistent homology and bottleneck distances (`neuralgeom.topology`) |
+| `dec` | dxtr | discrete exterior calculus (`neuralgeom.topology.dec`) |
+| `report` | reportlab, pillow, pypdf | PDF reports (`neuralgeom.viz`) |
+| `notebook` | ipykernel, jupyterlab | running the example notebooks |
 
-```bash
-pip install nbstripout
-where.exe nbstripout                    # copy the absolute path
-git config filter.nbstripout.clean  "<abs-path>/nbstripout.exe"
-git config filter.nbstripout.smudge cat
-git config filter.nbstripout.required true
-git config diff.ipynb.textconv "<abs-path>/nbstripout.exe -t"
+`numpy` is pinned below 2.0 because the current `geomstats` release requires
+it. Check an environment with `python examples/check_env.py`, and exercise
+every installed component with `python examples/verify_all.py`.
+
+## Capabilities
+
+```
+neuralgeom/
+  geometry/   pullback metrics of differentiable maps: per-sample Jacobians,
+              g = Jᵀ M J, volume element, anisotropy, Gaussian curvature,
+              Christoffel symbols and geodesics of a metric field; codomain
+              metrics including Fisher–Rao families; readout maps with exact
+              Jacobians; distances and means on the SPD manifold (affine-
+              invariant, log-Euclidean, Bures–Wasserstein, fixed-rank PSD) and
+              on the Grassmannian (principal angles, geodesic distance,
+              Fréchet mean)
+  subspace/   sliding-window Grassmannian embedding with a singular-value-gap
+              diagnostic; Riemannian speed, covariant acceleration, curvature,
+              path length; Karcher mean; tangent PCA (intrinsic
+              dimensionality); pooling of frames across trials
+  topology/   persistent homology (𝔽₂) on precomputed distance matrices,
+              within-trial and across-trial; bottleneck distance matrices;
+              optional discrete exterior calculus; comparison with persistent
+              homology of the raw state distances
+  dynamics/   recurrent and input Jacobians along trajectories, eigenvalue
+              spectra and time constants, fixed and slow points, readout and
+              input subspaces; estimation of linear dynamics from data
+              (global, sliding-window, cubic-field) with an instrumental-
+              variable correction for finite-difference velocity bias,
+              shared-field / per-condition input inference, and the
+              Helmholtz (gradient / rotational) decomposition
+  data/       the Trajectory object and its HDF5 schema; loaders for
+              recordings; adapters from arrays and synthetic data; a shared
+              PCA state space; pluggable dimensionality reduction; condition
+              builders
+  synth/      synthetic data with known generating dynamics: a two-attractor
+              model, low-rank rate RNNs, and connectivity-family rate RNNs
+              (random, low-rank, ring)
+  tasks/      cognitive tasks (perceptual decision, evidence integration,
+              context-dependent decision, delayed match-to-sample), RNN models
+              with a pure one-step update, and a supervised trainer
+  viz/        plotting style, metric-field renderings, PDF reports
+  fitting.py  differentiable readout maps and trial-grouped cross-validation
+  stats.py    permutation tests (Mantel, partial Mantel) and shuffle controls
+  paths.py    data and output locations
+
+scripts/      runnable analyses and demonstrations
+tests/        numerical tests
+docs/         formulation.tex, subspace_methods.tex (mathematical definitions)
 ```
 
-Until this is done, committing a notebook fails with an error. That is
-intentional: the alternative is silently committing megabytes of base64-encoded
-figure output on every re-run, which the repository never recovers from.
+## What can be analysed
 
-### Day to day
+The library accepts any batch of state trajectories `X (n_trials, T, N)` with
+a time axis, wrapped in a `neuralgeom.data.Trajectory`. Adapters exist for
+plain arrays, the bundled synthetic generators, recording sessions, and any
+external source that writes the HDF5 schema (for example, a trained network).
 
-```bash
-git pull                                        # start of a session
-# ... work ...
-git add -A && git commit -m "..." && git push   # end of a session
+Questions the tools address include:
+
+* How does a fitted map (a behavioural decoder, a readout, the recurrent
+  update) distort neural state space? Where is it most sensitive, along which
+  directions, and how does this vary with condition or time?
+* How similar are the local geometries of two populations, layers, or
+  conditions? (Distances between metric tensors and between subspaces.)
+* Does the coding subspace move over a trial, and how: in a directed way, or
+  along a closed orbit? Is the motion low-dimensional?
+* Does the activity contain loops or other recurrent structure, within a
+  trial or across trials, and is that structure present in both the state
+  trajectory and the subspace trajectory?
+* What are the recurrent dynamics of a trained network: time constants,
+  slow points, line attractors, and the alignment of readout, input and
+  high-variance subspaces?
+* Can linear dynamics be estimated from recorded population activity, and how
+  much of the velocity field is gradient-like versus rotational?
+
+## Quick start
+
+```python
+from neuralgeom.synth.subspace_rnn import SubspaceRNNConfig, make_trajectory
+
+cfg  = SubspaceRNNConfig(connectivity="ring", ring_rotating=True, N=50, n_trials=8)
+traj = make_trajectory(cfg)          # a neuralgeom.data.Trajectory
+traj.save("ring_rotating.h5")          # HDF5 round-trip
 ```
 
-`pull.rebase=true` is set globally, so switching between workstations keeps
-history linear instead of accumulating merge commits.
+Subspace trajectory and topology (needs the `geom` and `topology` extras):
+
+```python
+from neuralgeom.subspace import EmbedConfig, embed_from_trajectory, compute_kinematics, tangent_pca
+from neuralgeom.topology.persistence import within_trial_distances, persistent_homology, max_persistence
+
+emb = embed_from_trajectory(traj, trial=0, cfg=EmbedConfig(k=1, win=50, stride=10))
+kin = compute_kinematics(emb["frames"], emb["win_times"])   # speed, curvature, path length, ...
+tp  = tangent_pca(emb["frames"])                            # intrinsic dimensionality
+
+D   = within_trial_distances(traj, 0, EmbedConfig(k=1))     # Grassmannian geodesic distances
+h1  = max_persistence(persistent_homology(D, maxdim=1)[1])  # persistence of the loop on ℝPᴺ⁻¹
+```
+
+Pullback metric of a feed-forward map and of a trained recurrent network:
+
+```python
+import torch, torch.nn as nn
+from neuralgeom.geometry import ModelPullbackGeometry
+
+model = nn.Sequential(nn.Linear(3, 64), nn.Tanh(), nn.Linear(64, 10))
+geo = ModelPullbackGeometry(model)
+vol = geo.volume_element(torch.randn(32, 3))   # local volume magnification √det g
+
+from neuralgeom.tasks import make_task, make_model, train
+task = make_task("context_decision", dt=25, seed=0)
+rnn  = make_model("vanilla", task.spec, hidden_size=96, dt=task.dt)
+train(rnn, task, steps=3000)
+# then neuralgeom.dynamics: recurrent_jacobian, jacobian_spectrum, find_slow_points, ...
+```
+
+## Examples
+
+Two narrated notebooks each work a single network end to end and explain what
+every quantity describes. Their outputs are stripped in version control, so
+run them to regenerate the figures (`pip install -e '.[notebook]'`).
+
+* [`examples/example_ring_attractor.ipynb`](examples/example_ring_attractor.ipynb):
+  a ring-attractor RNN with a rotating bump. Grassmannian embedding and the
+  singular-value gap, distance from the initial subspace and recurrence,
+  Riemannian kinematics, tangent PCA, persistent homology of the `ℝP¹` loop,
+  its dependence on `k`, discrete exterior calculus, and a comparison with the
+  homology of the raw state distances.
+* [`examples/example_task_trained_rnn.ipynb`](examples/example_task_trained_rnn.ipynb):
+  a vanilla RNN trained on evidence integration. Psychometrics, population
+  geometry, recurrent-Jacobian spectra and effective time constants, slow
+  points and the line attractor, readout versus input subspaces, the
+  state-space pullback metric, and the subspace trajectory of the same
+  network.
+
+Smaller entry points:
+
+* `examples/quickstart.py`: the shortest end-to-end script.
+* `examples/neuralgeom_tour.ipynb`: a brief guided tour.
+* `scripts/subspace/demo_subspace_pipeline.py`: generate, embed, kinematics and
+  persistent homology across connectivity families and regimes.
+* `scripts/demos/`: pullback metric, SPD geometry, Grassmannian geometry, and
+  regression demonstrations on small models.
+* `scripts/rnn/`: train RNNs on the four cognitive tasks and analyse their
+  dynamics.
+* `scripts/attractor/`: dynamics estimation and pullback analyses on the
+  two-attractor model, with and without recordings.
+* `scripts/neural/`: quality control, population structure, reducer sweeps,
+  decoder pullback fields with permutation controls, and the condition-manifold
+  pullback on recorded populations (requires the recordings).
+
+Analyses that use trained networks from other repositories read them through
+the same HDF5 schema:
+
+```python
+from neuralgeom.data import load_trajectory
+traj = load_trajectory("path/to/states.h5")
+```
+
+### Data location
+
+Recordings are not part of the repository. Scripts that need them resolve the
+data directory from, in order, the `NEURALGEOM_DATA_DIR` environment variable,
+a one-line `data_dir.local` file in the repository root (see
+`data_dir.local.example`), or `./SampleData`. Inspect the resolved layout with:
+
+```bash
+python -c "from neuralgeom.paths import describe_paths; print(describe_paths())"
+```
+
+## Documentation
+
+| file | contents |
+|---|---|
+| [`docs/formulation.tex`](docs/formulation.tex) | the pullback-metric mathematics |
+| [`docs/subspace_methods.tex`](docs/subspace_methods.tex) | definitions of the subspace-trajectory and topology constructions |
+| [`examples/README.md`](examples/README.md) | the notebooks and verification scripts |
+
+## Background
+
+Pullback metrics of neural representations: Zavatone-Veth et al. (magnification
+near decision boundaries); Cayco-Gajic and Pellegrino (geometry-aware
+similarity metrics). Low-rank recurrent networks: Mastrogiuseppe and Ostojic;
+Beiran et al. Fixed-point analysis of trained networks: Sussillo and Barak.
+Shared dynamical motifs: Driscoll et al. Full reference lists are in the two
+`.tex` documents.

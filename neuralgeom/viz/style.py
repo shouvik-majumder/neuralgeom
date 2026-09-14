@@ -1,10 +1,8 @@
 """
 neuralgeom.viz.style — one plotting style and one figure-saving helper.
-==================================================================
+=======================================================================
 
-Previously ``examples/demo_common.py`` and ``examples/experiments/exp_common.py``
-each set their own rcParams and defined their own ``savefig``; the two had
-drifted apart. This is the single version.
+All scripts and reports share the rcParams and ``savefig`` defined here.
 """
 from __future__ import annotations
 

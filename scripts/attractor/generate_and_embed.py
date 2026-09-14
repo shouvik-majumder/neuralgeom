@@ -1,4 +1,4 @@
-"""Module 1 demo: generate synthetic neural data from known 2-attractor dynamics, and embed it.
+"""Generate synthetic neural data from the two-attractor model and embed it.
 
 Shows the whole output of the generator in one figure:
   - the 2-D latent vector field (two Gaussian-well attractors + the brief cue pulse),
@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 # --- make the neuralgeom package importable without installing it ---
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import neuralgeom.synth as syn
-from neuralgeom.synth.attractor import attractor_field, A1, A2
+from neuralgeom.synth.attractor import attractor_field, REST_ATTRACTOR, LICK_ATTRACTOR
 from neuralgeom.paths import fig_dir
 
 FIGDIR = str(fig_dir("demos"))
@@ -31,8 +31,8 @@ def main():
     # Default embedding: additive Gaussian observation noise -> high signal-to-noise, so the
     # latent structure is clearly visible (this demo is about showing what the generator makes).
     # The realistic, very sparse Poisson regime (~0.24 spikes/50 ms, ~90% empty bins) is shown
-    # for contrast in the last panel; that regime is where module 3's noise correction matters.
-    d = syn.generate("input", syn.INPUT_COND, n_trials=120, seed=1, bin_s=0.02,
+    # for contrast in the last panel; that regime is where the instrumental-variable correction matters.
+    d = syn.generate("input", syn.CUE_AMPLITUDE_LEVELS, n_trials=120, seed=1, bin_s=0.02,
                      n_neurons=80, poisson=False, obs_noise=0.15)
     t, lick, Z = d["time"], d["lick"], d["latent"]
     ok = np.isfinite(lick)
@@ -47,8 +47,8 @@ def main():
     U, V = attractor_field(gx.ravel(), gy.ravel())
     a.streamplot(gx, gy, U.reshape(gx.shape), V.reshape(gx.shape), color="#aab", density=1.1,
                  linewidth=.5, arrowsize=.7)
-    a.scatter(*A1, c="k", s=80, marker="o", label="baseline attractor")
-    a.scatter(*A2, c="r", s=120, marker="*", label="lick attractor")
+    a.scatter(*REST_ATTRACTOR, c="k", s=80, marker="o", label="baseline attractor")
+    a.scatter(*LICK_ATTRACTOR, c="r", s=120, marker="*", label="lick attractor")
     a.set_xlabel("cue mode X"); a.set_ylabel("ramping mode Y")
     a.set_title("Known dynamics: 2-attractor vector field", fontsize=10); a.legend(fontsize=8)
 
@@ -57,7 +57,7 @@ def main():
     for i in np.where(ok)[0][:60]:
         m = (t >= 0) & (t < lick[i] + 0.1)
         a.plot(Z[i][m, 0], Z[i][m, 1], color=col[i], alpha=.5, lw=.8)
-    a.scatter(*A1, c="k", s=60, marker="o"); a.scatter(*A2, c="r", s=100, marker="*")
+    a.scatter(*REST_ATTRACTOR, c="k", s=60, marker="o"); a.scatter(*LICK_ATTRACTOR, c="r", s=100, marker="*")
     a.set_xlabel("cue mode X"); a.set_ylabel("ramping mode Y")
     a.set_title("Single-trial latent paths (colour = lick time)", fontsize=10)
 
@@ -112,7 +112,7 @@ def main():
 
     # 6. CONTRAST: the realistic sparse-Poisson regime (~0.24 spikes/50 ms) buries PC1 in noise
     a = ax[1, 2]
-    dp = syn.generate("input", syn.INPUT_COND, n_trials=120, seed=1, bin_s=0.02, n_neurons=80,
+    dp = syn.generate("input", syn.CUE_AMPLITUDE_LEVELS, n_trials=120, seed=1, bin_s=0.02, n_neurons=80,
                       poisson=True, mean_count=0.24 * (0.02 / 0.05))
     Xp, lp = dp["X"], dp["lick"]; op = np.isfinite(lp)
     Xpf = Xp[op][:, fm].reshape(-1, Xp.shape[2])
@@ -125,7 +125,7 @@ def main():
     a.set_ylabel("# (unit, time, trial)")
     a.set_title(f"Realistic Poisson (0.24/50 ms): {100*(Xp==0).mean():.0f}% empty bins\n"
                 f"PC1-2 = {100*pcp.explained_variance_ratio_.sum():.0f}% variance, "
-                f"corr(PC1,lick) = {r_p:+.2f}\n(this sparse regime is what module 3 must correct)",
+                f"corr(PC1,lick) = {r_p:+.2f}\n(the sparse regime the instrumental-variable correction addresses)",
                 fontsize=9)
 
     sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis"); sm.set_array([])

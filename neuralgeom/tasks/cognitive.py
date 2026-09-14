@@ -1,9 +1,9 @@
 """
-rnn.tasks — temporally demanding cognitive tasks, as batched tensors.
-=====================================================================
+neuralgeom.tasks.cognitive — temporally demanding cognitive tasks, as batched tensors.
+======================================================================================
 
-Everything here speaks one small interface so tasks, models, and analyses
-stay independent:
+All tasks share one small interface, so tasks, models and analyses stay
+independent:
 
     task = EvidenceIntegration(dt=20, T=1000)
     batch = task.sample(64)            # -> TrialBatch
@@ -12,8 +12,7 @@ stay independent:
     batch.loss_mask                    # (B, T) bool — where the loss applies
     batch.meta                         # dict of per-trial condition variables
 
-To use a different task, swap the object; to use a *neurogym* task, wrap it
-with ``rnn.neurogym_adapter.NeuroGymTask`` — it produces the same TrialBatch.
+To use a different task, swap the object.
 
 Design notes
 ------------

@@ -1,131 +1,73 @@
-"""Synthetic two-mechanism testbed: distinguish 'landscape change' from 'input change'.
+"""
+neuralgeom.synth.attractor — two-attractor model of cue-triggered timing.
+========================================================================
 
-A 2-D latent double-well + saddle system (the 2-attractor / ramp-to-threshold picture):
+A 2-D latent state ``[X (cue mode), Y (ramping mode)]`` moves in a vector
+field made of two localised (Gaussian) attractors, a rest attractor and a
+"lick" attractor, following the two-attractor model of Majumder et al. The
+cue is a brief pulse; after it the flow is autonomous. A "lick" is registered
+when ``Y`` crosses a threshold. The latent trajectories are embedded into
+``n_neurons`` noisy units (Gaussian or Poisson) so that the estimators in
+:mod:`neuralgeom.dynamics` and the pullback tools in
+:mod:`neuralgeom.geometry` can be validated against known dynamics.
 
-    U(x,y) = a (x^2 - 1)^2 - c x + 0.5 k y^2          (wells ~ x=+-1, saddle near x=0)
-    z_dot  = -grad U(z) + Wrot z + B u(t) + sigma xi   (z=[x,y])
+Two generative mechanisms produce families of differently timed ramps:
 
-The state starts in the LEFT well (rest). A cue drives it rightward; when x crosses a threshold
-we call it a "lick". Two DISTINCT generative mechanisms produce a family of differently-timed
-ramps:
+  * mechanism "input"      the vector field is fixed and the cue amplitude
+                           varies by condition (a larger push crosses the
+                           threshold sooner);
+  * mechanism "landscape"  the cue is fixed and the vector field varies by
+                           condition through the pull strengths of the lick
+                           attractor. This changes the state-dependent field
+                           (the Jacobian), unlike an additive input.
 
-  * mechanism "input"     : landscape FIXED, cue input MAGNITUDE varies by condition
-                            (bigger push -> crosses sooner -> earlier lick). [MATLAB-style]
-  * mechanism "landscape" : cue input FIXED, LANDSCAPE varies by condition via the barrier
-                            steepness a (lower barrier -> crosses sooner). Crucially a changes the
-                            STATE-DEPENDENT field (the Jacobian), unlike an additive tilt/input.
+Both yield similar-looking ramps. Given only the embedded activity, the
+question for the estimators is whether the two mechanisms can be told apart.
 
-Both yield similar-looking ramp trajectories. The question the pipeline must answer: given only
-embedded high-D "firing rates", can we tell which mechanism generated the data? (See
-examples/demo_mechanism_id.py.)
-
-NOTE on identifiability: a constant tilt c enters the x-dynamics as a pure ADDITIVE term, exactly
-like a constant input -- so varying c is NOT a genuine landscape change and would be
-unidentifiable from an input change. That is why the landscape mechanism varies the barrier
-steepness a (which changes the recurrent/state-dependent vector field), not c.
+Note on identifiability: a constant additive tilt of the field enters the
+dynamics exactly like a constant input and would be indistinguishable from
+an input change, which is why the landscape mechanism varies the
+state-dependent pull strengths instead.
 """
 import numpy as np
 
-# reference (fixed) landscape parameters
-BASE = dict(a=1.0, c=0.15, k=3.0, omega=0.6, sigma=0.03, tau=0.15)
-X_TH = 0.5                 # lick threshold on x
-DT = 0.01                  # s
-T_CUE = 0.5                # cue onset (s)
-T_END = 2.5
 
-
-def _grad_U(z, a, c, k):
-    x, y = z[..., 0], z[..., 1]
-    gx = 4 * a * x * (x ** 2 - 1) - c
-    gy = k * y
-    return np.stack([gx, gy], -1)
-
-
-def simulate_trial(input_amp, a=BASE["a"], c=BASE["c"], k=BASE["k"], omega=BASE["omega"],
-                   sigma=BASE["sigma"], tau=BASE["tau"], seed=0, cue_dur=3.0, x0=-1.0):
-    """One trial. Cue = a SUSTAINED step of height `input_amp` along +x from T_CUE for `cue_dur` s
-    (default sustained). Returns z (T,2), u (T,), lick_time (s or nan), time (T,)."""
-    rng = np.random.default_rng(seed)
-    t = np.arange(0, T_END, DT); T = len(t)
-    u = np.zeros(T)
-    cue = (t >= T_CUE) & (t < T_CUE + cue_dur)
-    u[cue] = input_amp
-    Wrot = np.array([[0.0, -omega], [omega, 0.0]])
-    B = np.array([1.0, 0.0])
-    z = np.zeros((T, 2)); z[0] = [x0, 0.0]
-    lick = np.nan
-    for i in range(1, T):
-        drift = (-_grad_U(z[i - 1], a, c, k) + Wrot @ z[i - 1] + B * u[i - 1]) / tau
-        z[i] = z[i - 1] + DT * drift + sigma * np.sqrt(DT) * rng.standard_normal(2)
-        if np.isnan(lick) and z[i, 0] > X_TH and t[i] > T_CUE:
-            lick = t[i]
-    return z, u, lick, t
-
-
-def make_dataset(mechanism, levels, n_trials=30, seed=0, **fixed):
-    """Build a dataset for one mechanism across `levels` (one condition per level).
-
-    mechanism='input'     : levels are cue input amplitudes; landscape a = BASE.
-    mechanism='landscape' : levels are barrier-steepness a values; cue amplitude = fixed input_amp0.
-
-    Returns dict: Zlat (n_cond*n_trials, T, 2), U (…, T), cond (…,), lick (…,), time (T,),
-                  and the ground-truth per-condition params.
-    """
-    input_amp0 = fixed.get("input_amp0", 1.2)
-    Z, U, cond, lick = [], [], [], []
-    gt = []
-    rng = np.random.default_rng(seed)
-    for ci, lev in enumerate(levels):
-        if mechanism == "input":
-            pars = dict(input_amp=lev, a=BASE["a"])
-        elif mechanism == "landscape":
-            pars = dict(input_amp=input_amp0, a=lev)
-        else:
-            raise ValueError(mechanism)
-        gt.append(pars)
-        for k in range(n_trials):
-            s = int(rng.integers(1, 2**31))
-            z, u, lk, t = simulate_trial(pars["input_amp"], a=pars["a"], seed=s)
-            Z.append(z); U.append(u); cond.append(ci); lick.append(lk)
-    return dict(Zlat=np.array(Z), U=np.array(U), cond=np.array(cond),
-                lick=np.array(lick), time=t, mechanism=mechanism, levels=np.array(levels), gt=gt)
-
-
-# =========================================================================== #
-#  Two-attractor 2-D model (ported from Inagaki-lab Majumder et al.,           #
-#  Two_attarctors_model.m). State = [X (cue mode), Y (ramping mode)] in the    #
-#  SCALED coordinates: rest attractor A1=(1.5,1.5), goal attractor A2=(15,15). #
-#  The field is a sum of two localized (Gaussian) pulls, direction-normalized  #
-#  and anisotropically scaled (Ux=30, Vy=10); a ramp-gain increases the pull   #
-#  with Y. The cue is a BRIEF pulse (amp, angle); after it the flow is         #
-#  AUTONOMOUS. Lick = Y crossing Ythr=15.                                      #
-# =========================================================================== #
-A1 = np.array([1.5, 1.5]); A2 = np.array([15.0, 15.0]); YTHR = 15.0
-DT2 = 0.001; T_BASE = 0.6; T_CUE2 = 0.6; CUE_DUR = 0.2; T_END2 = 3.0   # 600 ms baseline pre-cue
+# --------------------------------------------------------------------------- #
+# Two-attractor model (Majumder et al.). State = [X (cue mode), Y (ramping
+# mode)] in scaled coordinates. The field is a sum of two localised (Gaussian)
+# pulls, one toward each attractor, with axis-specific strengths and a ramp gain
+# that increases the pull with Y. The cue is a brief pulse (amplitude, angle);
+# after it the flow is autonomous. A lick is registered when Y crosses
+# LICK_THRESHOLD.
+# --------------------------------------------------------------------------- #
+REST_ATTRACTOR = np.array([1.5, 1.5])      # position of the rest attractor (scaled coordinates)
+LICK_ATTRACTOR = np.array([15.0, 15.0])    # position of the lick attractor
+LICK_THRESHOLD = 15.0                      # lick registered when Y crosses this value
+DT = 0.001; T_BASE = 0.6; T_CUE = 0.6; CUE_DUR = 0.2; T_END = 3.0   # seconds; 600 ms baseline pre-cue
 T_WARMUP = 0.5   # extra pre-baseline settling time, simulated then sliced off (edge transient)
-SIG2 = 6.0                                          # Gaussian well width (scaled coords)
+WELL_WIDTH = 6.0                                    # Gaussian well width (scaled coords)
 # per-attractor axis-specific pull strengths (paper Eq.6): (ax, ay) for baseline & lick attractor
-BASE2 = dict(ax1=1.0, ay1=1.0, ax2=1.0, ay2=1.0)
+BASE_PULLS = dict(ax1=1.0, ay1=1.0, ax2=1.0, ay2=1.0)
 
 
 def attractor_field(X, Y, ax1=1.0, ay1=1.0, ax2=1.0, ay2=1.0, goal=15.0, couple=0.0):
     """Intrinsic vector field F(s), paper Eq.6 (RAW, not normalized -- normalization is figure-only).
-    Two Gaussian wells (baseline A1, lick attractor at (goal,goal)) with AXIS-SPECIFIC strengths:
+    Two Gaussian wells (baseline REST_ATTRACTOR, lick attractor at (goal,goal)) with AXIS-SPECIFIC strengths:
         Fx = -sum_k ax_k (x-x_k) exp(-||s-a_k||^2 / 2 sig^2)
         Fy = -sum_k ay_k (y-y_k) exp(-||s-a_k||^2 / 2 sig^2)
     The per-attractor (ax_k, ay_k) set the direction & magnitude of the pull, and `goal` the lick
     attractor position -> together they control the angle/amplitude of the trajectory. Changing any
     of them is a LANDSCAPE (flow) manipulation."""
     a2x = a2y = goal
-    r1 = ((X - A1[0]) ** 2 + (Y - A1[1]) ** 2) / (2 * SIG2 ** 2)
-    r2 = ((X - a2x) ** 2 + (Y - a2y) ** 2) / (2 * SIG2 ** 2)
+    r1 = ((X - REST_ATTRACTOR[0]) ** 2 + (Y - REST_ATTRACTOR[1]) ** 2) / (2 * WELL_WIDTH ** 2)
+    r2 = ((X - a2x) ** 2 + (Y - a2y) ** 2) / (2 * WELL_WIDTH ** 2)
     G1 = np.exp(-r1); G2 = np.exp(-r2)
     # optional cue->ramp coupling: gate the lick-attractor's Y-pull by cue-mode (X) progress, so the
     # ramp only builds once X has advanced (paper 'mod' term). couple=0 off, couple=1 full gating.
-    gate = np.clip((X - A1[0]) / (a2x - A1[0] + 1e-9), 0.0, 1.0)
+    gate = np.clip((X - REST_ATTRACTOR[0]) / (a2x - REST_ATTRACTOR[0] + 1e-9), 0.0, 1.0)
     gy = (1 - couple) + couple * gate
-    Fx = -ax1 * (X - A1[0]) * G1 - ax2 * (X - a2x) * G2
-    Fy = -ay1 * (Y - A1[1]) * G1 - ay2 * (Y - a2y) * G2 * gy
+    Fx = -ax1 * (X - REST_ATTRACTOR[0]) * G1 - ax2 * (X - a2x) * G2
+    Fy = -ay1 * (Y - REST_ATTRACTOR[1]) * G1 - ay2 * (Y - a2y) * G2 * gy
     return np.array([Fx, Fy])
 
 
@@ -135,52 +77,51 @@ def two_attractor_speed(X, Y, **kw):
     return attractor_field(X, Y, **keep)
 
 
-def simulate_2attr(cue_amp, cue_ang=np.pi / 4, ax1=1.0, ay1=1.0, ax2=1.0, ay2=1.0,
+def simulate_two_attractor_trial(cue_amp, cue_ang=np.pi / 4, ax1=1.0, ay1=1.0, ax2=1.0, ay2=1.0,
                    goal=15.0, couple=0.0, field_scale=1.0, sigma=0.2, seed=0):
     """One trial. Baseline phase [0,T_BASE) at rest; brief cue force A[cos,sin] during
-    [T_CUE2, T_CUE2+CUE_DUR]; autonomous otherwise. ds/dt = field_scale*F(s) + I(t). Lick = Y
+    [T_CUE, T_CUE+CUE_DUR]; autonomous otherwise. ds/dt = field_scale*F(s) + I(t). Lick = Y
     crossing 0.99*goal. Returns z (T,2), cue_on (T,), lick, time."""
     rng = np.random.default_rng(seed)
-    t = np.arange(0, T_END2, DT2); T = len(t)
-    z = np.zeros((T, 2)); z[0] = A1.copy()
-    cue_on = (t >= T_CUE2) & (t < T_CUE2 + CUE_DUR)
+    t = np.arange(0, T_END, DT); T = len(t)
+    z = np.zeros((T, 2)); z[0] = REST_ATTRACTOR.copy()
+    cue_on = (t >= T_CUE) & (t < T_CUE + CUE_DUR)
     lick = np.nan
     kick = cue_amp * np.array([np.cos(cue_ang), np.sin(cue_ang)])
     for i in range(1, T):
         F = attractor_field(z[i - 1, 0], z[i - 1, 1], ax1, ay1, ax2, ay2, goal, couple) * field_scale
         sp = F + (kick if cue_on[i] else 0.0)
-        z[i] = z[i - 1] + DT2 * sp + sigma * np.sqrt(DT2) * rng.standard_normal(2)
-        if np.isnan(lick) and z[i, 1] > goal * 0.99 and t[i] > T_CUE2:
+        z[i] = z[i - 1] + DT * sp + sigma * np.sqrt(DT) * rng.standard_normal(2)
+        if np.isnan(lick) and z[i, 1] > goal * 0.99 and t[i] > T_CUE:
             lick = t[i]
     return z, cue_on.astype(float), lick, t
 
 
-# Regime: cue angle 25 deg (X-heavier than the (1,1) diagonal) so the trajectory CURVES right-then-
-# up (paper-like); 45 deg would push straight up the diagonal (no curve). It also lands the state
-# at moderate x so field changes (ax2, ay2, rho) all affect timing. Matched post-cue licks ~0.5-1.2 s.
-FIELD_SCALE = 14.0     # tuned so post-cue lick times match SM318 (median ~0.63 s, 10-90% [0.5,0.8])
-CUE0 = (90.0, 25.0)                                                 # fixed cue for landscape mechs
-INPUT_COND = [(82, 25), (88, 25), (95, 25), (104, 25), (118, 25)]  # input mech: cue amplitude varies
-# landscape variants (each entry = simulate_2attr kwargs; fixed cue CUE0):
-LAND_AX2 = [dict(ax2=v) for v in [0.3, 0.55, 1.0, 1.8, 3.2]]                        # lick-attr x-pull
-LAND_AY2 = [dict(ay2=v) for v in [0.72, 0.9, 1.1, 1.35, 1.75]]                      # lick-attr y-pull
-LAND_GOAL = [dict(goal=v) for v in [16, 17.5, 19, 21, 23]]                          # (dropped in demos)
+# Default conditions. The cue angle of 25 deg (X-heavier than the diagonal) makes the trajectory
+# curve right-then-up and lands the state at moderate x, so that changes of ax2, ay2 and their
+# ratio all affect timing. Post-cue lick times are then roughly 0.5-1.2 s.
+FIELD_SCALE = 14.0                                 # overall speed of the field (s^-1 scale)
+FIXED_CUE = (90.0, 25.0)                           # (amplitude, angle deg) used by the landscape mechanism
+CUE_AMPLITUDE_LEVELS = [(82, 25), (88, 25), (95, 25), (104, 25), (118, 25)]   # input mechanism
+# landscape mechanism: each entry is a set of simulate_two_attractor_trial kwargs (cue = FIXED_CUE)
+LICK_ATTRACTOR_X_PULL_LEVELS = [dict(ax2=v) for v in [0.3, 0.55, 1.0, 1.8, 3.2]]
+LICK_ATTRACTOR_Y_PULL_LEVELS = [dict(ay2=v) for v in [0.72, 0.9, 1.1, 1.35, 1.75]]
+LICK_THRESHOLD_LEVELS = [dict(goal=v) for v in [16, 17.5, 19, 21, 23]]
 
 
-def land_ratio_family(ratios=(0.45, 0.7, 1.0, 1.5, 2.3), strength=1.0):
-    """Parametrized landscape family by the RATIO rho = ax2/ay2 of the lick attractor's x vs y
-    pull, at fixed geometric-mean strength. rho>1 = more x-pull, less y-pull (flatter path + slower
-    ramp -> later lick); rho<1 = steeper + earlier. Rotates the pull direction -> changes both the
-    angle and amplitude of the trajectory. Returns list of dicts with the rho value recorded."""
+def lick_attractor_pull_ratio_family(ratios=(0.45, 0.7, 1.0, 1.5, 2.3), strength=1.0):
+    """Landscape conditions parametrised by the ratio rho = ax2/ay2 of the lick attractor's x and y
+    pull at fixed geometric-mean pull strength. rho > 1 (more x-pull, less y-pull) gives a flatter
+    path and a slower ramp, hence a later lick; rho < 1 a steeper path and an earlier lick.
+    Returns a list of kwarg dicts with the rho value recorded."""
     return [dict(ax2=strength * np.sqrt(r), ay2=strength / np.sqrt(r), rho=r) for r in ratios]
 
 
-LAND_AX2AY2 = land_ratio_family()                                                  # ratio family
-# (ax2, ay2) combos found by demo_landscape_match.py to MATCH the input model's per-condition
-# trajectories & lick times (fixed cue CUE0). Use for the behaviorally-matched recovery test.
-LAND_MATCHED = [dict(ax2=0.88, ay2=0.85), dict(ax2=0.88, ay2=1.0), dict(ax2=1.46, ay2=1.0),
+LICK_ATTRACTOR_PULL_RATIO_LEVELS = lick_attractor_pull_ratio_family()
+# (ax2, ay2) pairs whose per-condition trajectories and lick times match those of the input
+# mechanism's conditions (cue = FIXED_CUE); used for the behaviourally matched recovery test.
+LICK_ATTRACTOR_BEHAVIOUR_MATCHED_LEVELS = [dict(ax2=0.88, ay2=0.85), dict(ax2=0.88, ay2=1.0), dict(ax2=1.46, ay2=1.0),
                 dict(ax2=2.92, ay2=1.0), dict(ax2=3.5, ay2=1.75)]
-LAND_COND = LAND_AY2                                                               # back-compat
 
 
 def simulate_batch(n_trials, cue_amp, cue_ang=np.pi / 4, ax1=1.0, ay1=1.0, ax2=1.0, ay2=1.0,
@@ -199,47 +140,47 @@ def simulate_batch(n_trials, cue_amp, cue_ang=np.pi / 4, ax1=1.0, ay1=1.0, ax2=1
     internal clock, i.e. before the -0.6 s analysis baseline once re-zeroed to the cue): it lets
     causal filters have real history at the start of the analysis window, and downstream code
     excludes it with a simple time mask.  The internal clock has t=0 at the start of the analysed
-    baseline, cue at T_CUE2, and the buffer spans [-warmup, 0)."""
+    baseline, cue at T_CUE, and the buffer spans [-warmup, 0)."""
     rng = np.random.default_rng(seed)
-    t_full = np.arange(-warmup, T_END2, DT2); T = len(t_full)
-    Z = np.zeros((n_trials, T, 2)); Z[:, 0, :] = A1
-    cue_on = (t_full >= T_CUE2) & (t_full < T_CUE2 + CUE_DUR)
+    t_full = np.arange(-warmup, T_END, DT); T = len(t_full)
+    Z = np.zeros((n_trials, T, 2)); Z[:, 0, :] = REST_ATTRACTOR
+    cue_on = (t_full >= T_CUE) & (t_full < T_CUE + CUE_DUR)
     amp = cue_amp * (1 + amp_jitter * rng.standard_normal(n_trials))        # per-trial cue amplitude
     kick = amp[:, None] * np.array([np.cos(cue_ang), np.sin(cue_ang)])[None, :]   # (n,2)
-    lick = np.full(n_trials, np.nan); nz = sigma * np.sqrt(DT2)
+    lick = np.full(n_trials, np.nan); nz = sigma * np.sqrt(DT)
     for i in range(1, T):
         F = attractor_field(Z[:, i - 1, 0], Z[:, i - 1, 1], ax1, ay1, ax2, ay2, goal, couple)
         sp = (F.T) * field_scale
         if cue_on[i]:
             sp = sp + kick
-        Z[:, i, :] = Z[:, i - 1, :] + DT2 * sp + nz * rng.standard_normal((n_trials, 2))
-        new = np.isnan(lick) & (Z[:, i, 1] > goal * 0.99) & (t_full[i] > T_CUE2)
+        Z[:, i, :] = Z[:, i - 1, :] + DT * sp + nz * rng.standard_normal((n_trials, 2))
+        new = np.isnan(lick) & (Z[:, i, 1] > goal * 0.99) & (t_full[i] > T_CUE)
         lick[new] = t_full[i]
     return Z, cue_on.astype(float), lick, t_full, amp
 
 
-def make_dataset_2attr(mechanism, levels=None, n_trials=30, seed=0, bin_s=0.02,
+def make_two_attractor_dataset(mechanism, levels=None, n_trials=30, seed=0, bin_s=0.02,
                        field_scale=FIELD_SCALE, **fixed):
     """Two-attractor dataset for one mechanism (paper-faithful, no overshoot, with baseline phase).
       mechanism='input'     : FIXED landscape; cue AMPLITUDE & ANGLE covary by condition.
-                              levels = list of (amp, angle_deg); default INPUT_COND.
-      mechanism='landscape' : FIXED cue (CUE0); the lick-attractor Y-pull ay2 varies by condition
+                              levels = list of (amp, angle_deg); default CUE_AMPLITUDE_LEVELS.
+      mechanism='landscape' : FIXED cue (FIXED_CUE); the lick-attractor Y-pull ay2 varies by condition
                               (shallower well -> slower ramp -> later lick), a genuine flow change.
-                              levels = list of ay2 values; default LAND_COND.
+                              levels = list of ay2 values; default LICK_ATTRACTOR_Y_PULL_LEVELS.
     Returns Zlat (n,T,2), U (cue on/off), cond, lick, time, plus the per-condition cue (amp,angle)
     and ay2 so the ground-truth input can be reconstructed."""
-    step = int(round(bin_s / DT2))
+    step = int(round(bin_s / DT))
     Z, cue, cond, lick, rho_of = [], [], [], [], []
     cue_amp_of, cue_ang_of, ay2_of = [], [], []
     rng = np.random.default_rng(seed)
     if levels is None:
-        levels = INPUT_COND if mechanism == "input" else LAND_COND
+        levels = CUE_AMPLITUDE_LEVELS if mechanism == "input" else LICK_ATTRACTOR_Y_PULL_LEVELS
     for ci, lev in enumerate(levels):
         rho = np.nan
         if mechanism == "input":
             amp, ang = lev; kw = {}
         elif mechanism == "landscape":
-            amp, ang = CUE0                              # FIXED cue for all landscape conditions
+            amp, ang = FIXED_CUE                              # FIXED cue for all landscape conditions
             if isinstance(lev, dict):
                 kw = dict(lev); rho = kw.pop("rho", np.nan)   # 'rho' is metadata, not a sim arg
             elif isinstance(lev, (tuple, list)):
@@ -301,7 +242,7 @@ def generate(mechanism="input", levels=None, n_trials=120, seed=0, bin_s=0.02,
         latent (n_trials, T, 2)      the NOISELESS ground-truth state,
         plus cue_amp / cue_ang / ay2 / mechanism / levels for ground-truth checks.
     """
-    d = make_dataset_2attr(mechanism, levels, n_trials=n_trials, seed=seed, bin_s=bin_s,
+    d = make_two_attractor_dataset(mechanism, levels, n_trials=n_trials, seed=seed, bin_s=bin_s,
                            field_scale=field_scale, **fixed)
     if poisson:
         rates, _ = embed_rates(d["Zlat"], n_neurons=n_neurons, gain=gain, noise=0.0,
@@ -313,8 +254,8 @@ def generate(mechanism="input", levels=None, n_trials=120, seed=0, bin_s=0.02,
     else:
         X, _ = embed_rates(d["Zlat"], n_neurons=n_neurons, gain=gain, noise=obs_noise,
                            seed=embed_seed)
-    time = np.asarray(d["time"], float) - T_CUE2               # cue onset -> t = 0
-    out = dict(X=X, time=time, lick=np.asarray(d["lick"], float) - T_CUE2,
+    time = np.asarray(d["time"], float) - T_CUE               # cue onset -> t = 0
+    out = dict(X=X, time=time, lick=np.asarray(d["lick"], float) - T_CUE,
                cond=d["cond"], latent=d["Zlat"], mechanism=mechanism,
                levels=d["levels"], cue_amp=d["cue_amp"], cue_ang=d["cue_ang"], ay2=d["ay2"],
                bin_s=bin_s)

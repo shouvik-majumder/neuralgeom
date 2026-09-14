@@ -401,7 +401,7 @@ story += [
     P("The package is deliberately partitioned so that changing the task, the "
       "architecture, the training procedure, or the analysis never requires "
       "touching the other three."),
-    gtable(["Layer", "File", "Contract"],
+    gtable(["Layer", "File", "Interface"],
            [["what to solve", "rnn/tasks.py",
              "sample(B) &#8594; TrialBatch(inputs, targets, loss_mask, meta)"],
             ["what solves it", "rnn/models.py",
@@ -409,9 +409,7 @@ story += [
             ["how it learns", "rnn/train.py",
              "train(model, task, steps=...) — task- and model-agnostic"],
             ["what it learned", "rnn/analysis.py",
-             "Jacobians, spectra, slow points, subspaces"],
-            ["optional backend", "rnn/neurogym_adapter.py",
-             "any neurogym env &#8594; the same TrialBatch"]],
+             "Jacobians, spectra, slow points, subspaces"]],
            [1.25 * inch, 1.75 * inch, 3.4 * inch]),
     Spacer(1, 10),
     P("The single design decision that makes the geometry work is that every "
@@ -428,14 +426,6 @@ story += [
       "subclass <font face='Courier' size='8.5'>models._BaseRNN</font> and "
       "implement <font face='Courier' size='8.5'>step(x, h)</font> — the "
       "analysis tools need nothing else."),
-    P("Using neurogym instead", h2),
-    P("The adapter was verified end-to-end: a VanillaRNN trained through it "
-      "on <font face='Courier' size='8.5'>PerceptualDecisionMaking-v0</font> "
-      "reached 87% with no changes to the model, trainer, or analysis code."),
-    P("from rnn.neurogym_adapter import NeuroGymTask<br/>"
-      "task&#160;&#160;= NeuroGymTask(\"ContextDecisionMaking-v0\", dt=20)<br/>"
-      "model = make_model(\"gru\", task.spec, hidden_size=128)<br/>"
-      "train(model, task, steps=3000)", mono),
     P("Reproducing this document", h2),
     P("python scripts/rnn/train_rnn_models.py&#160;&#160;&#160;&#160;# cached; "
       "--resume adds steps<br/>"

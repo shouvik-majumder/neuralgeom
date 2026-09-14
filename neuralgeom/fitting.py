@@ -1,16 +1,13 @@
 """
-neuralgeom.fitting — the differentiable maps we pull metrics back through,
-plus the cross-validation that keeps them honest.
-=====================================================================
+neuralgeom.fitting — the differentiable maps that metrics are pulled back through,
+and their cross-validation.
+==================================================================================
 
 A pullback metric is only as meaningful as the map it comes from, so fitting
-and validation belong together in one place. Every neural-data analysis used
-to carry its own near-identical copy of these routines; the copies had drifted
-(different hidden sizes, different fold logic, one with a prediction-scatter
-bug), which is exactly the sort of inconsistency this module exists to remove.
+and validation belong together in one place, shared by every analysis.
 
-WHAT IS HERE
-------------
+Contents
+--------
 mlp                 a small tanh MLP (or a linear model) -> the map f
 fit_map             fit f on (X, Y) by Adam, with an optional sample cap
 trial_folds         K folds that never split a trial across folds
@@ -18,8 +15,8 @@ cv_fit_predict      out-of-fold predictions AND out-of-fold Jacobians
 r2_score            variance explained, on held-out data only
 shrink_cov          Ledoit-Wolf-style shrinkage covariance
 
-WHY FOLDS MUST BE BY TRIAL
---------------------------
+Why folds are grouped by trial
+------------------------------
 Consecutive time bins of one trial are a smoothed trajectory and are therefore
 strongly dependent. If folds were split over SAMPLES, bins of the same trial
 would land in both train and test, and the score would measure memorisation of

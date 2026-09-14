@@ -2,29 +2,28 @@
 neuralgeom.topology.persistence — persistent homology of subspace trajectories.
 ================================================================================
 
-The topological half of the subspace lens (ProjectiveSpaceModels Step 6). Runs
-persistent homology directly on a **precomputed geodesic distance matrix**, so
-it is metric- and manifold-agnostic: give it any distance matrix (Grassmannian
-geodesic, SPD, Euclidean state distance …) and it returns the birth/death
-diagrams. Homology is computed over the field 𝔽₂ (``coeff=2``), the field that
-exposes real-projective / non-orientable structure (``Gr(1, N) = ℝPᴺ⁻¹``).
+Runs persistent homology on a precomputed distance matrix, so it is
+independent of the metric and the manifold: any distance matrix (Grassmannian
+geodesic, SPD, Euclidean state distance, …) yields birth / death diagrams.
+Homology is computed over 𝔽₂ (``coeff=2``), which detects real-projective /
+non-orientable structure (``Gr(1, N) = ℝPᴺ⁻¹``).
 
-    ph(D)                     ripser on a precomputed distance matrix → diagrams
-    summarize(dgms)           per-dimension feature counts + top lifetimes
-    top_life(dgm)             the single most persistent lifetime
-    bottleneck_matrix(h1s)    pairwise H1 bottleneck distances (a topological
-                              fingerprint dissimilarity between conditions)
-    single_trial_distances    Gr(k,N) geodesic distances for one trial
-    pooled_distances          across-trial pooled-cloud geodesic distances
+    persistent_homology(D)     ripser on a precomputed distance matrix
+    summarize_diagrams(dgms)   per-dimension feature counts and top lifetimes
+    max_persistence(dgm)       largest finite lifetime in one diagram
+    bottleneck_matrix(h1s)     pairwise H1 bottleneck distances between
+                               conditions
+    within_trial_distances     Gr(k, N) geodesic distances along one trial
+    across_trial_distances     geodesic distances of the pooled frame cloud
 
-Two scopes matter (per the conventions): ``single`` (a per-trial trajectory —
-within-trial loops) and ``pooled`` (the across-trial cloud — loops that only
-live across trials). Persistent homology needs no embedding, which is why it —
-not the DEC layer — is the load-bearing topology.
+Two point clouds are relevant: the frames of a single trial (loops traversed
+within a trial) and the frames of all trials pooled (structure that only
+appears across trials). Persistent homology needs no embedding, which is why
+it is the primary topological result and the DEC layer is secondary.
 
-``ripser`` and ``persim`` are the optional ``[topology]`` extra; they are
-imported lazily with a clear error if missing. Building the distance matrices
-needs only the (core) geometry layer.
+``ripser`` and ``persim`` are the optional ``[topology]`` extra and are
+imported lazily. Building the distance matrices needs only the core geometry
+layer.
 """
 from __future__ import annotations
 
@@ -34,8 +33,8 @@ from ..geometry.grassmann import frame_distance_matrix
 from ..subspace.embed import EmbedConfig, embed_trajectory
 from ..subspace.pooling import PoolConfig, pool_frames
 
-__all__ = ["ph", "summarize", "top_life", "bottleneck_matrix",
-           "single_trial_distances", "pooled_distances"]
+__all__ = ["persistent_homology", "summarize_diagrams", "max_persistence", "bottleneck_matrix",
+           "within_trial_distances", "across_trial_distances"]
 
 
 def _ripser():
@@ -60,19 +59,19 @@ def _bottleneck():
         ) from e
 
 
-def ph(D: np.ndarray, maxdim: int = 2, coeff: int = 2):
+def persistent_homology(D: np.ndarray, maxdim: int = 2, coeff: int = 2):
     """Persistent homology of a **precomputed distance matrix** ``D`` (M, M).
 
     Returns the list of persistence diagrams ``[H0, H1, …]`` (each an array of
-    ``[birth, death]`` rows). ``coeff=2`` (𝔽₂) is the convention here — it
-    exposes non-orientable / projective structure.
+    ``[birth, death]`` rows). ``coeff=2`` (𝔽₂) is the default because it
+    detects non-orientable / projective structure.
     """
     ripser = _ripser()
     return ripser(np.asarray(D, float), distance_matrix=True,
                   maxdim=maxdim, coeff=coeff)["dgms"]
 
 
-def summarize(dgms) -> dict:
+def summarize_diagrams(dgms) -> dict:
     """Per dimension → ``(n_finite_features, [top-2 lifetimes])``."""
     out = {}
     for dim, dg in enumerate(dgms):
@@ -86,7 +85,7 @@ def summarize(dgms) -> dict:
     return out
 
 
-def top_life(dgm) -> float:
+def max_persistence(dgm) -> float:
     """Largest finite lifetime in one diagram (0 if empty)."""
     if dgm is None or len(dgm) == 0:
         return 0.0
@@ -96,8 +95,8 @@ def top_life(dgm) -> float:
 
 
 def bottleneck_matrix(h1_list) -> np.ndarray:
-    """Symmetric matrix of pairwise H1 bottleneck distances between diagrams —
-    a topological-fingerprint dissimilarity between conditions."""
+    """Symmetric matrix of pairwise H1 bottleneck distances between diagrams,
+    a topological dissimilarity between conditions."""
     bottleneck = _bottleneck()
     n = len(h1_list)
     B = np.zeros((n, n))
@@ -108,20 +107,20 @@ def bottleneck_matrix(h1_list) -> np.ndarray:
     return B
 
 
-def single_trial_distances(traj, trial: int = 0, cfg: EmbedConfig = None,
-                           metric: str = "canonical") -> np.ndarray:
-    """Geodesic distance matrix of one trial's Gr(k, N) trajectory (the
-    ``single`` scope)."""
+def within_trial_distances(traj, trial: int = 0, cfg: EmbedConfig = None,
+                           metric: str = "sqrt2_principal_angle") -> np.ndarray:
+    """Geodesic distance matrix of the frames along one trial's Gr(k, N)
+    trajectory."""
     cfg = cfg or EmbedConfig()
     X, _ = traj.trial(trial)
     emb = embed_trajectory(X, cfg)
     return frame_distance_matrix(emb["frames"], metric=metric)
 
 
-def pooled_distances(traj, cfg: PoolConfig = None,
-                     metric: str = "canonical") -> np.ndarray:
-    """Geodesic distance matrix of the across-trial pooled frame cloud (the
-    ``pooled`` scope)."""
+def across_trial_distances(traj, cfg: PoolConfig = None,
+                     metric: str = "sqrt2_principal_angle") -> np.ndarray:
+    """Geodesic distance matrix of the frames of all trials pooled into one
+    point cloud."""
     cfg = cfg or PoolConfig(fields=False)
     frames, _, _ = pool_frames(traj, cfg)
     return frame_distance_matrix(frames, metric=metric)

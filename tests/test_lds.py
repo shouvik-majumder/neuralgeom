@@ -66,11 +66,11 @@ def test_split_half_pca_is_a_valid_instrument():
     f_iv = dyn.fit_lds(db["Z"], db["V"], cv=False, instrument=da["Z"])
     # OLS on noisy states invents symmetric contraction (inflated strength and
     # gradient fraction); the split-half instrument must undo most of it.
-    true_strength = 7.0 / 6.0                                  # -mean Re eig(A)
-    assert f_iv["strength"] < 0.3 * f_ols["strength"]
-    assert abs(f_iv["strength"] - true_strength) < abs(f_ols["strength"] - true_strength) / 4
-    gf_ols = dyn.helmholtz_split(f_ols["A"])["grad_frac"]
-    gf_iv = dyn.helmholtz_split(f_iv["A"])["grad_frac"]
+    true_mean_negative_real_eigenvalue = 7.0 / 6.0                                  # -mean Re eig(A)
+    assert f_iv["mean_negative_real_eigenvalue"] < 0.3 * f_ols["mean_negative_real_eigenvalue"]
+    assert abs(f_iv["mean_negative_real_eigenvalue"] - true_mean_negative_real_eigenvalue) < abs(f_ols["mean_negative_real_eigenvalue"] - true_mean_negative_real_eigenvalue) / 4
+    gf_ols = dyn.helmholtz_split(f_ols["A"])["symmetric_part_norm_fraction"]
+    gf_iv = dyn.helmholtz_split(f_iv["A"])["symmetric_part_norm_fraction"]
     assert gf_iv < gf_ols - 0.15                               # de-biased toward the truth
     assert min(f_iv["first_stage_r2"]) > 0.05                  # instrument has bite
 
@@ -79,7 +79,7 @@ def test_helmholtz_split_identity():
     A = np.array([[-1., 3, 0], [-3, -2., 0], [0, 0, -0.5]])
     sp = dyn.helmholtz_split(A)
     assert np.allclose(sp["A_grad"] + sp["A_rot"], A) and sp["convex"]
-    assert abs(sp["grad_frac"] ** 2 + sp["rot_frac"] ** 2 - 1) < 1e-9
+    assert abs(sp["symmetric_part_norm_fraction"] ** 2 + sp["antisymmetric_part_norm_fraction"] ** 2 - 1) < 1e-9
 
 
 def test_causal_velocity_no_preonset_leak():
@@ -106,12 +106,12 @@ def test_regression_suite():
         Z.append(z)
     Z = np.array(Z)
     R = dyn.run_regression_suite(Z, lick, t, np.arange(n), bin_s=0.05, base=-0.6, n_splits=3)
-    assert set(R) == {"velocity", "ttl"}
+    assert set(R) == {"velocity", "time_to_lick"}
     vel = {r["name"]: r for r in R["velocity"]}
     # S+W must equal the full flow A exactly (additivity)
     assert abs(vel["S + W"]["cv_post"] - vel["full flow  A"]["cv_post"]) < 1e-9
     # every field present
-    for r in R["ttl"]:
+    for r in R["time_to_lick"]:
         for k in ("cv_pre", "cv_post", "sh_pre", "sh_post", "corr_pre", "corr_post"):
             assert k in r
 

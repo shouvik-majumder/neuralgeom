@@ -1,4 +1,4 @@
-"""Tests for the unified Trajectory contract (``neuralgeom.data.trajectory``)."""
+"""Tests for the Trajectory object and its HDF5 schema (``neuralgeom.data.trajectory``)."""
 import sys
 from pathlib import Path
 
@@ -67,7 +67,7 @@ def test_load_trial_and_all(tmp_path):
 
 
 def test_legacy_rnn_schema(tmp_path):
-    """A legacy ProjectiveSpaceModels rnn_{tag}.h5 (no 'meta' attr) loads with
+    """A legacy rnn_{tag}.h5 file (no 'meta' attr) loads with
     its onsets/phi0/omega/config folded into aux/meta."""
     import h5py
 

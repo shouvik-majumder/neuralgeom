@@ -1,4 +1,4 @@
-"""Numerical checks for pullback_metric.py — run with: python test_pullback_metric.py"""
+"""Numerical checks for neuralgeom.geometry.jacobian — run with: python test_pullback_metric.py"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -10,11 +10,11 @@ import torch
 import torch.nn as nn
 
 from neuralgeom.geometry.jacobian import (
-    PullbackGeometry,
+    ModelPullbackGeometry,
     batch_jacobian,
     log_volume_element,
     metric_spectrum,
-    pullback_metric,
+    euclidean_pullback_metric,
     volume_element,
 )
 
@@ -35,7 +35,7 @@ X = torch.randn(B, n)
 J = batch_jacobian(lin, X)
 check("J shape (B, m, n)", J.shape == (B, m, n))
 check("J == W for all samples", torch.allclose(J, lin.weight.expand(B, m, n)))
-g = pullback_metric(lin, X)
+g = euclidean_pullback_metric(lin, X)
 g_true = lin.weight.T @ lin.weight
 check("g == W^T W", torch.allclose(g, g_true.expand(B, n, n)))
 check("g symmetric", torch.allclose(g, g.transpose(-1, -2)))
@@ -57,7 +57,7 @@ J2_true[:, 0, 0] = torch.cos(X2[:, 0])
 J2_true[:, 1, 0] = X2[:, 1]
 J2_true[:, 1, 1] = X2[:, 0]
 check("autodiff matches analytic J", torch.allclose(J2, J2_true))
-g2 = pullback_metric(f, X2)
+g2 = euclidean_pullback_metric(f, X2)
 check("det g == det(J)^2", torch.allclose(torch.det(g2), torch.det(J2_true) ** 2, atol=1e-10))
 check("vol == |det J|", torch.allclose(volume_element(f, X2), torch.det(J2_true).abs()))
 
@@ -89,7 +89,7 @@ X4 = torch.randn(5, 3)
 Jr = batch_jacobian(mlp, X4, mode="rev")
 Jf = batch_jacobian(mlp, X4, mode="fwd")
 check("rev == fwd", torch.allclose(Jr, Jf, atol=1e-12))
-geom = PullbackGeometry(mlp)
+geom = ModelPullbackGeometry(mlp)
 check("wrapper metric == J^T J", torch.allclose(geom.metric(X4), Jr.transpose(1, 2) @ Jr))
 check("wrapper logvol finite (m>n, generic full rank)", torch.isfinite(geom.log_volume_element(X4)).all())
 

@@ -1,6 +1,6 @@
-"""Module 3 demo (REAL data): fit ONE linear flow to the population activity and describe it.
+"""Fit one linear flow to recorded population activity and describe it.
 
-Deliberately simple and descriptive -- no per-condition binning, no instrument, no metric
+Deliberately simple and descriptive -- no per-condition binning, no instrumental variable, no metric
 choices.  We fit a SINGLE vector field  dz/dt = A z + b  to all post-cue trials and look at it
 from many angles, with a within-trial time-shuffle NULL as the only significance test.
 
@@ -49,9 +49,9 @@ BASE = -0.6       # baseline shown before the cue
 
 
 # ---------------------------------------------------------------- fitting helpers
-def rot_energy(A):
-    """Coordinate-INVARIANT rotation measure: fraction of the eigenvalue 'energy' that is
-    imaginary,  sum|Im(eig)| / sum|eig|.  0 = pure gradient/contraction (all real eigenvalues),
+def imag_eigenvalue_fraction(A):
+    """Coordinate-invariant rotation measure: sum|Im(eig)| / sum|eig|, the fraction of the total
+    eigenvalue modulus that is imaginary.  0 = pure gradient/contraction (all real eigenvalues),
     higher = more rotation (complex-conjugate pairs).  Unlike the Euclidean ||W||/||A|| fraction
     this does not depend on the coordinate system / metric."""
     ev = np.linalg.eigvals(np.asarray(A))
@@ -181,7 +181,7 @@ def figure_fit(key, sess, m, usable, Z, t, d):
     for _ in range(20):
         fr = dyn.fit_shared_input_free(dI["Z"], _roll(dI["V"], dI["group"], rng), cs, dI["tsec"],
                                        groups=dI["group"], input_bin_s=0.05)
-        null_cv.append(fr["cv_r2"]); null_rot.append(rot_energy(fr["field"]["A"]))
+        null_cv.append(fr["cv_r2"]); null_rot.append(imag_eigenvalue_fraction(fr["field"]["A"]))
         null_ev.append(np.linalg.eigvals(fr["field"]["A"]))
     null_cv = np.array(null_cv); null_rot = np.array(null_rot)
     null_ev = np.concatenate(null_ev)
@@ -241,7 +241,7 @@ def figure_fit(key, sess, m, usable, Z, t, d):
     # 4. the two DEFENSIBLE, testable claims vs the shuffle null
     a = ax[1, 1]
     names = ["is there a flow?\n(model CV R2)", "is there rotation?\n(sum|Im|/sum|eig|)"]
-    dat = [free["cv_r2"], rot_energy(A)]
+    dat = [free["cv_r2"], imag_eigenvalue_fraction(A)]
     nullm = [null_cv.mean(), null_rot.mean()]; nulls = [null_cv.std(), null_rot.std()]
     x = np.arange(2)
     a.bar(x, dat, 0.45, color=["#37a", "#c39"], label="data")
@@ -262,10 +262,10 @@ def figure_fit(key, sess, m, usable, Z, t, d):
     Minv = np.linalg.inv(Sig); Minv /= np.mean(np.linalg.eigvalsh(Minv))
     cvm = dyn.helmholtz_split(A, M=Minv)
     print(f"{key}: model CV R2 = {free['cv_r2']:.2f} (null {null_cv.mean():+.2f})")
-    print(f"  rotation energy sum|Im|/sum|eig| = {rot_energy(A):.2f} (null {null_rot.mean():.2f})")
+    print(f"  imaginary-eigenvalue fraction sum|Im|/sum|eig| = {imag_eigenvalue_fraction(A):.2f} (null {null_rot.mean():.2f})")
     print(f"  {int(np.sum(np.abs(ev.imag) > 1e-6) // 2)} complex eigenvalue pairs (rotation)")
-    print(f"  (metric-dependent Euclidean grad_frac={eu['grad_frac']:.2f} vs "
-          f"covariance grad_frac={cvm['grad_frac']:.2f} -- why we lead with the invariant "
+    print(f"  (metric-dependent Euclidean symmetric_part_norm_fraction={eu['symmetric_part_norm_fraction']:.2f} vs "
+          f"covariance symmetric_part_norm_fraction={cvm['symmetric_part_norm_fraction']:.2f} -- why we lead with the invariant "
           f"spectrum instead)")
 
 
@@ -325,7 +325,7 @@ def figure_ttl_order(key, sess, usable, Z, t):
     whether velocity / acceleration add over the instantaneous state (delay-embedding test)."""
     lick = sess.lick
     use = np.array([i for i in np.where(usable)[0] if lick[i] > 0.2])
-    O = dyn.ttl_order_analysis(Z, lick, t, use, bin_s=BIN, base=BASE)
+    O = dyn.time_to_lick_regression(Z, lick, t, use, bin_s=BIN, base=BASE)
     names = [o["name"] for o in O]
     x = np.arange(len(names)); w = 0.38
     fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw=dict(width_ratios=[1.5, 1]))
@@ -381,13 +381,13 @@ def figure_regressions(key, sess, usable, Z, t):
         "velocity rolled in time (within trial)", "velocity (a.u.)",
         os.path.join(FIGDIR, f"dynamics_real_{key}_regr_velocity.png"))
     figure_regression_group(
-        R["ttl"],
+        R["time_to_lick"],
         f"neuralgeom.dynamics, REAL {key}: PREDICT TIME-TO-LICK, pre- vs post-cue  "
         f"(velocity regressors are MODEL velocities A z + b, i.e. linear maps of the state)",
         "regressor rolled in time (within trial)", "time-to-lick (s)",
         os.path.join(FIGDIR, f"dynamics_real_{key}_regr_timetolick.png"))
-    print(f"{key}: time-to-lick decoding from state  CV R2 pre {R['ttl'][0]['cv_pre']:+.2f}  "
-          f"post {R['ttl'][0]['cv_post']:+.2f}")
+    print(f"{key}: time-to-lick decoding from state  CV R2 pre {R['time_to_lick'][0]['cv_pre']:+.2f}  "
+          f"post {R['time_to_lick'][0]['cv_post']:+.2f}")
     print(f"{key}: velocity from state (full A)      CV R2 pre {R['velocity'][0]['cv_pre']:+.2f}  "
           f"post {R['velocity'][0]['cv_post']:+.2f}")
 

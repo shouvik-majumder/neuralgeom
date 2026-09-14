@@ -42,7 +42,8 @@ class PullbackMetric:
         return J.T @ G @ J
 
     def metric_vector_product(self, x, v) -> np.ndarray:
-        """g(x) v without forming g: J^T (G (J v)). Cheap for high-dim state."""
+        """g(x) v without forming g: J^T (G (J v)). Avoids the (n, n) matrix for
+        high-dimensional states."""
         J, G = self._jacobian_and_G(x)
         v = np.atleast_1d(np.asarray(v, float))
         return J.T @ (G @ (J @ v))

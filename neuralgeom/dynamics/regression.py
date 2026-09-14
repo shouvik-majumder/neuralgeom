@@ -24,7 +24,7 @@ pre-cue model on pre-cue training samples, a post-cue model on post-cue training
 scored on its own held-out samples.  Also returned, for the raw 'target vs regressor' scatter,
 is the regressor's leading component vs the target with its Pearson correlation, per epoch.
 
-``ttl_order_analysis`` (separate) asks how much of the time-to-lick is predictable, and from
+``time_to_lick_regression`` (separate) asks how much of the time to lick is predictable, and from
 what: linear vs nonlinear (quadratic) state, and whether adding velocity / acceleration helps
 (if they do, the observed state is a partial observation and recent history matters).
 """
@@ -35,7 +35,7 @@ import numpy as np
 
 from .lds import trial_velocities, fit_lds
 
-__all__ = ["run_regression_suite", "ttl_order_analysis"]
+__all__ = ["run_regression_suite", "time_to_lick_regression"]
 
 
 def _r2(y, yh):
@@ -62,7 +62,7 @@ def _pearson(x, y):
 
 def run_regression_suite(Z, lick, t, use, bin_s=0.05, base=-0.6, gap=2, smooth_bins=1.0,
                          n_splits=5, ridge=1.0, seed=0, scatter_n=2500):
-    """Return {'velocity': [...], 'ttl': [...]}; see module docstring.  Each entry is a dict with
+    """Return {'velocity': [...], 'time_to_lick': [...]}; see module docstring.  Each entry is a dict with
     held-out CV R2 and shuffle R2 (mean +/- sd) for pre-cue and post-cue, the target-vs-regressor
     correlation per epoch, and pooled held-out points for the scatters."""
     from sklearn.model_selection import GroupKFold
@@ -77,21 +77,21 @@ def run_regression_suite(Z, lick, t, use, bin_s=0.05, base=-0.6, gap=2, smooth_b
         d = trial_velocities(trials, bin_s, gap=gap, smooth_bins=smooth_bins, causal=True,
                              time=t, keep=keep)
         tid = np.asarray(idx)[d["group"]]
-        ttl = lick[tid] - d["tsec"]
-        return dict(z=d["Z"], v=d["V"], ttl=ttl, grp=d["group"], tsec=d["tsec"],
+        time_to_lick = lick[tid] - d["tsec"]
+        return dict(z=d["Z"], v=d["V"], time_to_lick=time_to_lick, grp=d["group"], tsec=d["tsec"],
                     post=d["tsec"] >= 0)
 
     vel_names = ["full flow  A", "gradient  S", "rotation  W", "S + W"]
     # NOTE: these are MODEL velocities (A z + b etc.) -- invertible linear maps of the state, so
     # regressing them on time-to-lick recovers the same R2 as decoding from the state directly.
-    # (The MEASURED velocity dz/dt is a different object; see ttl_order_analysis.)
-    ttl_names = ["state z", "model velocity full  (A z + b)", "model velocity gradient  (S z + b)",
+    # (The MEASURED velocity dz/dt is a different object; see time_to_lick_regression.)
+    time_to_lick_names = ["state z", "model velocity full  (A z + b)", "model velocity gradient  (S z + b)",
                  "model velocity rotation  (W z)", "model velocity  S+W"]
     # accumulators
     V = {n: dict(cv_pre=[], cv_post=[], sh_pre=[], sh_post=[],
                  sc_pre=([], []), sc_post=([], []), tvr=([], [], [])) for n in vel_names}
     T = {n: dict(cv_pre=[], cv_post=[], sh_pre=[], sh_post=[],
-                 sc_pre=([], []), sc_post=([], []), tvr=([], [], [])) for n in ttl_names}
+                 sc_pre=([], []), sc_post=([], []), tvr=([], [], [])) for n in time_to_lick_names}
 
     def comp(A, b):
         S = (A + A.T) / 2; W = (A - A.T) / 2
@@ -129,11 +129,11 @@ def run_regression_suite(Z, lick, t, use, bin_s=0.05, base=-0.6, gap=2, smooth_b
                 return {"model velocity full  (A z + b)": vA,
                         "model velocity gradient  (S z + b)": vS,
                         "model velocity rotation  (W z)": vW, "model velocity  S+W": vA}[name]
-            for nm in ttl_names:
+            for nm in time_to_lick_names:
                 Xtr = regressor(nm, ztr); Xte = regressor(nm, zte)
-                yte = te["ttl"][tem]
-                dec = Ridge(ridge).fit(Xtr, tr["ttl"][trm])
-                decs = Ridge(ridge).fit(_roll_within(Xtr, gtr, rng), tr["ttl"][trm])
+                yte = te["time_to_lick"][tem]
+                dec = Ridge(ridge).fit(Xtr, tr["time_to_lick"][trm])
+                decs = Ridge(ridge).fit(_roll_within(Xtr, gtr, rng), tr["time_to_lick"][trm])
                 T[nm][f"cv_{key}"].append(_r2(yte, dec.predict(Xte)))
                 T[nm][f"sh_{key}"].append(_r2(yte, decs.predict(Xte)))
                 T[nm][f"sc_{key}"][0].extend(yte); T[nm][f"sc_{key}"][1].extend(dec.predict(Xte))
@@ -170,9 +170,9 @@ def run_regression_suite(Z, lick, t, use, bin_s=0.05, base=-0.6, gap=2, smooth_b
         return out
 
     vel = pack(V, vel_names, lambda nm: "neural state z", "velocity dz/dt")
-    ttl = pack(T, ttl_names, lambda nm: ("neural state z" if nm == "state z" else nm),
+    time_to_lick = pack(T, time_to_lick_names, lambda nm: ("neural state z" if nm == "state z" else nm),
                "time-to-lick (s)")
-    return {"velocity": vel, "ttl": ttl}
+    return {"velocity": vel, "time_to_lick": time_to_lick}
 
 
 # ======================================================================================
@@ -182,7 +182,7 @@ def _state_vel_acc(Z, lick, t, idx, bin_s, base, gap, smooth_bins):
     """Per post-cue-window sample: state z, velocity v = dz/dt, acceleration a = d2z/dt2,
     time-to-lick, epoch flag, trial group -- all causal (past-only), so nothing leaks forward."""
     from scipy.ndimage import uniform_filter1d
-    zs, vs, as_, ttls, post, grp = [], [], [], [], [], []
+    zs, vs, as_, time_to_lick_list, post, grp = [], [], [], [], [], []
     dt = gap * bin_s
     for gi, i in enumerate(idx):
         m = (t >= base) & (t < lick[i] + 0.05)
@@ -195,12 +195,12 @@ def _state_vel_acc(Z, lick, t, idx, bin_s, base, gap, smooth_bins):
         v = (zz[k] - zz[k - gap]) / dt
         a = (zz[k] - 2 * zz[k - gap] + zz[k - 2 * gap]) / dt ** 2
         zs.append(zz[k]); vs.append(v); as_.append(a)
-        ttls.append(lick[i] - ti[k]); post.append(ti[k] >= 0); grp.append(np.full(len(k), gi))
-    return (np.vstack(zs), np.vstack(vs), np.vstack(as_), np.concatenate(ttls),
+        time_to_lick_list.append(lick[i] - ti[k]); post.append(ti[k] >= 0); grp.append(np.full(len(k), gi))
+    return (np.vstack(zs), np.vstack(vs), np.vstack(as_), np.concatenate(time_to_lick_list),
             np.concatenate(post), np.concatenate(grp))
 
 
-def ttl_order_analysis(Z, lick, t, use, bin_s=0.05, base=-0.6, gap=2, smooth_bins=2,
+def time_to_lick_regression(Z, lick, t, use, bin_s=0.05, base=-0.6, gap=2, smooth_bins=2,
                        n_splits=5, seed=0):
     """Predict time-to-lick from increasingly rich features, fit and scored WITHIN each epoch:
 

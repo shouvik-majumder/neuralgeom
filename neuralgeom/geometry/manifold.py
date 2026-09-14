@@ -1,10 +1,10 @@
 """
-neuro.geometry — pullback geometry of a map from a LOW-dimensional domain
-into neural state space.
-=========================================================================
+neuralgeom.geometry.manifold — pullback geometry of a map from a low-dimensional
+domain into neural state space.
+================================================================================
 
-WHY THE DIRECTION MATTERS
--------------------------
+Direction of the map
+--------------------
 For a smooth map f : M -> R^n, the pullback metric is g = J^T M_cod J, and
 
         rank(g) = dim(M)     (when f is an immersion)
@@ -17,7 +17,7 @@ is what makes volume element, anisotropy and curvature meaningful.
 
 This module implements that construction for arbitrary domain dimension.
 
-THE CODOMAIN METRIC
+The codomain metric
 -------------------
 g = J^T M J where M is an inner product on neural state space.
 
@@ -30,12 +30,12 @@ g = J^T M J where M is an inner product on neural state space.
                    actually resolve. For Gaussian noise this IS the Fisher
                    information metric of the population code.
 
-Implementation trick: choosing M is equivalent to whitening the codomain,
+Implementation note: choosing M is equivalent to whitening the codomain,
 because J^T M J = (W J)^T (W J) with W = M^(1/2). So every routine below just
 takes an already-whitened map and uses Euclidean formulas.
 
-QUANTITIES (all defined before use)
------------------------------------
+Quantities
+----------
 * metric g (d x d)       inner product induced on the domain. g_ab tells you
                          the neural-space length of a step in domain
                          coordinate a and b.
@@ -169,14 +169,15 @@ def gaussian_curvature_2d(f: Callable[[Tensor], Tensor], X: Tensor
 
 # --------------------------------------------------------------------------- #
 def metric_summary(g: Tensor) -> dict:
-    """Scalar descriptors of a field of metrics, for reporting/nulls."""
+    """Scalar descriptors of a field of metrics: median volume element, p95/p5 ratio of the
+    volume element, median and maximum anisotropy, plus the per-point arrays."""
     vol = volume_element(g)
     ani = anisotropy(g)
     return dict(
-        vol_med=float(vol.median()),
-        vol_spread=float(torch.quantile(vol, 0.95)
+        volume_median=float(vol.median()),
+        volume_p95_p5_ratio=float(torch.quantile(vol, 0.95)
                          / torch.quantile(vol, 0.05).clamp_min(1e-30)),
-        ani_med=float(ani.median()),
-        ani_max=float(ani.max()),
-        vol=vol.detach().numpy(), ani=ani.detach().numpy(),
+        anisotropy_median=float(ani.median()),
+        anisotropy_max=float(ani.max()),
+        volume=vol.detach().numpy(), anisotropy=ani.detach().numpy(),
     )

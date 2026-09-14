@@ -1,47 +1,30 @@
 """
-neuralgeom.paths — single source of truth for where things live.
-============================================================
+neuralgeom.paths — data and output locations.
+=============================================
 
-Before this module every script recomputed the project root with its own
-``Path(__file__).parents[n]`` and invented its own output directory, which
-meant a script could not be moved without breaking. Import from here instead.
+All scripts import their data and output locations from here instead of
+recomputing them.
 
     from neuralgeom.paths import DATA_DIR, fig_dir
-    fig = fig_dir("neural_stage4a")        # -> outputs/figures/neural
+    fig = fig_dir("neural")                # -> outputs/figures/neural
 
-DATA LOCATION (v0.5.1). ``DATA_DIR`` is no longer hardwired inside the
-repository. The repository is expected to live on fast local disk while the
-recordings live on a lab network share, and the share may be mounted at a
-different path on each workstation. Resolution order, first match wins:
+Data location. ``DATA_DIR`` is the read-only directory holding the recordings.
+Resolution order, first match wins:
 
   1. the ``NEURALGEOM_DATA_DIR`` environment variable, if set and non-empty;
-  2. the first non-comment line of ``<repo>/data_dir.local`` (gitignored —
-     copy ``data_dir.local.example`` and edit it per machine);
-  3. ``<repo>/SampleData`` — the historical default, so an existing checkout
-     that keeps data beside the code keeps working unchanged.
+  2. the first non-comment line of ``<repo>/data_dir.local`` (gitignored;
+     copy ``data_dir.local.example`` and edit it);
+  3. ``<repo>/SampleData``.
 
-``DATA_DIR_SOURCE`` records which of the three applied; ``describe_paths()``
-prints the whole resolved layout, which is the fastest way to diagnose a
-"file not found" on a machine you have not used in a while. Note that
-``DATA_DIR`` is NEVER created — it is read-only input, and silently making an
-empty directory would mask a missing network mount.
+``DATA_DIR_SOURCE`` records which rule applied and ``describe_paths()`` prints
+the resolved layout. ``DATA_DIR`` is never created: it is read-only input, and
+silently creating an empty directory would mask a missing mount.
 
-FIGURE LAYOUT (deliberately FLAT). Figures live in just three folders —
-``outputs/figures/{demos, rnn, neural}`` — one per pipeline family, with NO
-per-stage subfolders: every filename already carries its stage prefix
-(``qc1_``, ``s3b_``, ``cd_1_``, ``gr_step1_``, ``dynamics_real_``, ...), so
-deep nesting only made browsing harder. ``fig_dir`` still accepts the old
-stage names (``"neural_stage4a"``, ``"exp_context_decision"``, ...) and maps
-them onto the right family folder, so no analysis script needs to know about
-this.
-
-SINGLE ARTEFACT FOLDER (v0.4.1). ``outputs/`` is the ONE place anything
-generated may land: ``figures/``, ``pdf/``, ``checkpoints/``, ``cache/``.
-The legacy top-level ``results/`` folder was merged into it (its artefacts
-moved to ``outputs/checkpoints/best_rnn_*`` and ``outputs/cache/
-{flow_reality_*, lds_cases_*, rnn_folds_percall.jsonl}``; its markdown run
-notes were folded into HANDOFF.md). Never create a sibling results folder --
-write through OUTPUT_DIR / CKPT_DIR / CACHE_DIR / fig_dir() instead.
+Outputs. Everything generated lands under ``outputs/``: ``figures/``,
+``pdf/``, ``checkpoints/``, ``cache/``. Figures live in three flat folders,
+``outputs/figures/{demos, rnn, neural}``, one per script family; the analysis
+is identified by the filename prefix rather than by a subfolder. ``fig_dir``
+maps a script or family name onto the right folder.
 """
 from __future__ import annotations
 
@@ -81,7 +64,7 @@ def _resolve_data_dir() -> tuple[Path, str]:
         # UTF8` and Notepad both prepend a byte-order mark (U+FEFF). It is
         # invisible, str.strip() does NOT remove it (it is not whitespace), and
         # the result is a path that looks correct in every error message while
-        # never existing. Learned the hard way.
+        # never existing.
         for raw in marker.read_text(encoding="utf-8-sig").splitlines():
             line = raw.strip().lstrip("\ufeff").strip().strip('"').strip("'")
             if line and not line.startswith("#"):
@@ -108,7 +91,7 @@ for _d in (OUTPUT_DIR, FIG_ROOT, PDF_DIR, CKPT_DIR, CACHE_DIR):
 
 
 def fig_family(name: str) -> str:
-    """Map an analysis/stage name onto one of the three figure families."""
+    """Map a script or family name onto one of the three figure families."""
     if name in FIG_FAMILIES:
         return name
     if name.startswith(("neural", "qc")):
@@ -119,17 +102,15 @@ def fig_family(name: str) -> str:
 
 
 def fig_dir(name: str) -> Path:
-    """Figure directory for one analysis stage (a FAMILY folder, created if
-    needed). Stage identity lives in the FILENAME prefix, not in a subfolder."""
+    """Figure directory for one script (a family folder, created if needed).
+    The analysis is identified by the filename prefix, not by a subfolder."""
     d = FIG_ROOT / fig_family(name)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def describe_paths() -> str:
-    """Human-readable dump of the resolved layout, for sanity-checking a new
-    machine. ``python -c "from neuralgeom.paths import describe_paths as d;
-    print(d())"`` answers "why can it not find my data" in one line."""
+    """Human-readable dump of the resolved layout, for checking a new machine."""
     lines = [
         f"PROJECT_ROOT     {PROJECT_ROOT}",
         f"DATA_DIR         {DATA_DIR}",
