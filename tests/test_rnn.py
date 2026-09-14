@@ -122,7 +122,10 @@ pre = m.rec(h) + m.inp(x)
 h_expected = (1 - m.alpha) * h + m.alpha * torch.tanh(pre)
 check("step matches (1-a)h + a*tanh(Wh + Ux + b)",
       torch.allclose(m.step(x, h), h_expected, atol=1e-12))
-check("alpha = dt/tau", abs(m.alpha - 0.2) < 1e-12)
+# alpha is now PER UNIT — a (hidden,) tensor, since tau may be given as a
+# (low, high) range. With a scalar tau every entry is dt/tau, so compare the
+# whole vector rather than truncating it to a scalar.
+check("alpha = dt/tau", bool((m.alpha - 0.2).abs().max() < 1e-12))
 
 J = recurrent_jacobian(m, h, x)
 J_analytic = ((1 - m.alpha) * torch.eye(12)
