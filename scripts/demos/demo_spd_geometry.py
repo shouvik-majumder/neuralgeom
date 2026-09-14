@@ -41,8 +41,8 @@ import torch.nn as nn
 from demo_common import (banner, decision_background, input_grid,
                          make_classifier, metric_ellipse, savefig,
                          scatter_data, train_classifier, two_moons)
-from neuralgeom.geometry.jacobian import pullback_metric
-from neuralgeom.geometry.spd import (MetricFieldGeometry, affine_invariant_distance,
+from neuralgeom.geometry.jacobian import euclidean_pullback_metric
+from neuralgeom.geometry.spd import (ModelMetricFieldGeometry, affine_invariant_distance,
                           bures_wasserstein_distance, log_euclidean_distance,
                           pairwise_spd_distance, psd_decompose,
                           psd_fixed_rank_distance, regularize,
@@ -53,7 +53,7 @@ from neuralgeom.geometry.spd import (MetricFieldGeometry, affine_invariant_dista
 banner("Step 0", "Data, model, and the raw objects: metric tensors g_x")
 X, y = two_moons(400)
 model = train_classifier(make_classifier(), X, y)
-geo = MetricFieldGeometry(model)
+geo = ModelMetricFieldGeometry(model)
 
 # transect crossing the decision boundary twice
 t = torch.linspace(0, 1, 9).unsqueeze(1)
@@ -228,8 +228,8 @@ print("\n(5a) Bottleneck models (2 -> 1 -> 2) have rank-1 pullback metrics "
 bott = nn.Sequential(nn.Linear(2, 1), nn.Tanh(), nn.Linear(1, 2))
 bott2 = nn.Sequential(nn.Linear(2, 1), nn.Tanh(), nn.Linear(1, 2))
 Xs = X[:20]
-G_deg = pullback_metric(bott, Xs)     # rank-1, one range direction
-G_deg2 = pullback_metric(bott2, Xs)   # rank-1, a different range direction
+G_deg = euclidean_pullback_metric(bott, Xs)     # rank-1, one range direction
+G_deg2 = euclidean_pullback_metric(bott2, Xs)   # rank-1, a different range direction
 print(f"   eigenvalues of g at one point: "
       f"{torch.linalg.eigvalsh(G_deg[0]).numpy()}")
 eps_range = [1e-12, 1e-9, 1e-6, 1e-3]
@@ -271,7 +271,7 @@ print("   BUT it is a structure metric (Bonnabel-Sepulchre), NOT a geodesic "
       "where that matters.")
 
 print("\n(5c) No Fréchet mean on the fixed-rank manifold (open problem-ish):")
-sgeo = MetricFieldGeometry(bott)
+sgeo = ModelMetricFieldGeometry(bott)
 try:
     sgeo.frechet_mean(Xs, metric="fixed_rank")
 except NotImplementedError as e:

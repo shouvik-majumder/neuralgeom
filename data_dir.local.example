@@ -1,7 +1,7 @@
 # Copy this file to `data_dir.local` in the same folder, then put ONE line in
 # it: the absolute path to the read-only recordings directory on THIS machine.
 #
-# `data_dir.local` is gitignored, so each workstation may point somewhere
+# `data_dir.local` is gitignored, so each machine may point somewhere
 # different (a drive letter that differs, a local cache, a share). Blank lines
 # and lines starting with # are ignored; the first real line wins.
 #

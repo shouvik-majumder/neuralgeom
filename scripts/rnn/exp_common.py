@@ -2,14 +2,14 @@
 Shared infrastructure for the per-task RNN experiments.
 =======================================================
 
-Each experiment script (exp_<task>.py) follows the same four-part arc:
+Each experiment script (exp_<task>.py) follows the same four-part structure:
 
     1. TRAINING      what the network was asked to learn, and how it learned
     2. BEHAVIOUR     what it does, measured the way a psychophysicist would
     3. ACTIVITY      what the units and the population do (PSTHs, PCA)
     4. GEOMETRY      one geometric measurement that EXPLAINS part 2 and 3
 
-This module holds the plumbing they share: population analysis helpers,
+This module holds the helpers they share: population analysis helpers,
 plotting conventions, psychophysical reverse correlation, and a small
 report builder so each experiment can emit a self-contained PDF.
 """

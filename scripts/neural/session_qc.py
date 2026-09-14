@@ -1,6 +1,6 @@
 """
-STAGE 0 — Data QC for the SampleData ephys sessions.
-====================================================
+session_qc.py — data quality control for the Neuropixels sessions.
+===================================================================
 
 Purpose: catch data-wrangling problems BEFORE any modelling. Nothing here
 fits a model or computes a geometry; every panel describes what is actually
@@ -15,7 +15,7 @@ Figures:
   qc5_rasters_psth       example units: raw-spike rasters vs processed PSTHs
   qc6_population         population activity, dimensionality, lick tuning
 
-Run:  python qc_report.py [SESSION_ID]
+Run:  python scripts/neural/session_qc.py [SESSION_ID]
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from neuralgeom.data.loader import (DROPPED_FIELDS, RESPONSE_TYPES,  # noqa: E40
                           load_session, session_table)
 
 DATA = DATA_DIR
-FIG = fig_dir("neural_qc")
+FIG = fig_dir("neural")
 
 SESSION = sys.argv[1] if len(sys.argv) > 1 else "SM259_20230417_g0"
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 145, "font.size": 8,

@@ -25,7 +25,7 @@ and provides the standard Grassmannian machinery to compare them:
   * ``grassmann_log`` / ``grassmann_exp`` — Riemannian log/exp maps
   * ``grassmann_frechet_mean``       — projection ("flag") mean and iterative
                                        Karcher mean
-  * ``GrassmannGeometry``            — convenience wrapper per (model, layer)
+  * ``ModelSubspaceGeometry``            — convenience wrapper per (model, layer)
 
 Comparability notes
 -------------------
@@ -35,13 +35,13 @@ Comparability notes
   fields of different layers are directly comparable.
 * Fixed ``k`` puts every point on the same Grassmannian Gr(k, D). With
   ``k=None`` the common k is chosen automatically (min numerical rank across
-  the batch, or an energy threshold), with a warning if ranks vary.
+  the batch, or a variance-fraction threshold), with a warning if ranks vary.
 
 Example
 -------
 >>> model = nn.Sequential(nn.Linear(3, 64), nn.Tanh(), nn.Linear(64, 10))
->>> geo = GrassmannGeometry(model, which="column", k=3)     # full model
->>> hid = GrassmannGeometry(model, layer=1, which="row")    # after Tanh
+>>> geo = ModelSubspaceGeometry(model, which="column", k=3)     # full model
+>>> hid = ModelSubspaceGeometry(model, layer=1, which="row")    # after Tanh
 >>> Q, s, rank = geo.subspaces(X)          # (B, 10, 3) orthonormal bases
 >>> D = geo.distance_matrix(X)             # (B, B) geodesic distances
 >>> mu = geo.frechet_mean(X)               # (10, 3) mean subspace
@@ -68,7 +68,7 @@ __all__ = [
     "grassmann_log",
     "grassmann_exp",
     "grassmann_frechet_mean",
-    "GrassmannGeometry",
+    "ModelSubspaceGeometry",
 ]
 
 LayerLike = Union[None, str, int, torch.nn.Module]
@@ -155,7 +155,7 @@ def tangent_subspaces(
     *,
     which: str = "column",
     k: Optional[int] = None,
-    energy: Optional[float] = None,
+    variance_fraction: Optional[float] = None,
     rtol: Optional[float] = None,
     layer: LayerLike = None,
     mode: str = "auto",
@@ -174,7 +174,7 @@ def tangent_subspaces(
         Subspace dimension. If given, top-k singular directions are used at
         every point (all points on the same Grassmannian). If None, k is
         chosen automatically:
-          * with ``energy`` in (0, 1]: smallest k whose singular values carry
+          * with ``variance_fraction`` in (0, 1]: smallest k whose singular values carry
             that fraction of the total squared spectrum at every point
             (max over batch, so no point is truncated below the threshold);
           * otherwise: minimum numerical rank across the batch (cutoff
@@ -209,11 +209,11 @@ def tangent_subspaces(
         raise ValueError(f"which must be 'column' or 'row', got {which!r}")
 
     if k is None:
-        if energy is not None:
-            if not 0.0 < energy <= 1.0:
-                raise ValueError("energy must be in (0, 1]")
+        if variance_fraction is not None:
+            if not 0.0 < variance_fraction <= 1.0:
+                raise ValueError("variance_fraction must be in (0, 1]")
             frac = s.square().cumsum(dim=1) / s.square().sum(dim=1, keepdim=True)
-            k_pt = (frac < energy).sum(dim=1) + 1          # per-point k
+            k_pt = (frac < variance_fraction).sum(dim=1) + 1          # per-point k
             k = int(k_pt.max())
         else:
             k = int(rank.min())
@@ -417,7 +417,7 @@ def grassmann_frechet_mean(
 # Convenience wrapper
 # --------------------------------------------------------------------------- #
 @dataclass
-class GrassmannGeometry:
+class ModelSubspaceGeometry:
     """Grassmannian analysis of one (model, layer) pair.
 
     Parameters
@@ -426,14 +426,14 @@ class GrassmannGeometry:
     layer : None | str | int | nn.Module — hidden layer (see FeatureExtractor)
     which : "column" (image in codomain) or "row" (input directions)
     k : subspace dimension (None = auto, see ``tangent_subspaces``)
-    energy : spectral-energy threshold used when k is None
+    variance_fraction : variance-fraction threshold used when k is None
     mode, chunk_size : forwarded to ``batch_jacobian``
 
     Row-space geometries of *different layers* of the same model live on the
     same Grassmannian Gr(k, n_input) and can be compared directly, e.g.::
 
-        g1 = GrassmannGeometry(model, layer=1, which="row", k=2)
-        g2 = GrassmannGeometry(model, layer=3, which="row", k=2)
+        g1 = ModelSubspaceGeometry(model, layer=1, which="row", k=2)
+        g2 = ModelSubspaceGeometry(model, layer=3, which="row", k=2)
         d = grassmann_distance(g1.subspaces(X)[0], g2.subspaces(X)[0])
     """
 
@@ -441,7 +441,7 @@ class GrassmannGeometry:
     layer: LayerLike = None
     which: str = "column"
     k: Optional[int] = None
-    energy: Optional[float] = None
+    variance_fraction: Optional[float] = None
     mode: str = "auto"
     chunk_size: Optional[int] = None
 
@@ -455,7 +455,7 @@ class GrassmannGeometry:
                   ) -> Tuple[Tensor, Tensor, Tensor]:
         """(Q, singular_values, ranks) — see ``tangent_subspaces``."""
         out = tangent_subspaces(
-            self.model, X, which=self.which, k=self.k, energy=self.energy,
+            self.model, X, which=self.which, k=self.k, variance_fraction=self.variance_fraction,
             layer=self.layer, mode=self.mode, chunk_size=self.chunk_size,
             jacobian=jacobian,
         )
@@ -503,7 +503,6 @@ class GrassmannGeometry:
 
 # =========================================================================== #
 #  NumPy / geomstats frame-based Grassmannian API                             #
-#  (merged in from the ProjectiveSpaceModels ``gr_utils`` module)             #
 # =========================================================================== #
 #
 # The torch API above is the *model-facing* layer: it takes an ``nn.Module``
@@ -522,19 +521,18 @@ class GrassmannGeometry:
 #   * numpy (frames U / projectors P):  ``frame_principal_angles``,
 #     ``frame_distance``, ``frame_distance_matrix``, ``GrassmannManifold`` …
 #
-# Metric conventions (identical to the original two repos — do NOT change):
+# Metric conventions (fixed; downstream results depend on them):
 #   For two k-frames with principal angles {θ_i}:
 #       d_arc        = sqrt(Σ θ_i²)          (principal-angle / arc-length)
-#       d_canonical  = sqrt(2) · d_arc       (geomstats GrassmannianCanonicalMetric)
+#       d_sqrt2      = sqrt(2) · d_arc       (the geomstats GrassmannianCanonicalMetric convention)
 #   Both are valid Riemannian distances differing only by the global factor
 #   √2, so persistent homology and curve *shapes* are invariant to the choice.
 
 import numpy as _np
 
-SQRT2 = float(_np.sqrt(2.0))
+_SQRT2 = float(_np.sqrt(2.0))
 
 __all__ += [
-    "SQRT2",
     "frame_to_projector",
     "projector_to_frame",
     "orthonormalize",
@@ -542,7 +540,7 @@ __all__ += [
     "frame_distance",
     "frame_distance_matrix",
     "GrassmannManifold",
-    "validate_fast_matches_geomstats",
+    "check_frame_distance_against_geomstats",
 ]
 
 
@@ -587,22 +585,22 @@ def frame_principal_angles(A: "_np.ndarray", B: "_np.ndarray") -> "_np.ndarray":
 
 
 def frame_distance(A: "_np.ndarray", B: "_np.ndarray",
-                   metric: str = "canonical") -> float:
+                   metric: str = "sqrt2_principal_angle") -> float:
     """Geodesic distance between two subspaces given as frames.
 
-    ``metric="canonical"`` matches the geomstats canonical metric
+    ``metric="sqrt2_principal_angle"`` matches the geomstats canonical metric
     (``√2 × arc-length``); ``metric="principal_angle"`` returns the plain
     arc-length ``sqrt(Σ θ_i²)``. The fast path here uses only the k×k SVD of
     ``Aᵀ B`` (cost ``O(N k²)``) and is validated equal to geomstats'
-    ``metric.dist`` to ~1e-15 by :func:`validate_fast_matches_geomstats`.
+    ``metric.dist`` to ~1e-15 by :func:`check_frame_distance_against_geomstats`.
     """
     theta = frame_principal_angles(A, B)
     d = float(_np.sqrt(_np.sum(theta ** 2)))
-    return SQRT2 * d if metric == "canonical" else d
+    return _SQRT2 * d if metric == "sqrt2_principal_angle" else d
 
 
 def frame_distance_matrix(frames: "_np.ndarray",
-                          metric: str = "canonical") -> "_np.ndarray":
+                          metric: str = "sqrt2_principal_angle") -> "_np.ndarray":
     """Pairwise geodesic distance matrix (M, M) for a stack of frames ``(M, N, k)``.
 
     Uses the fast principal-angle path, so this is ``O(M² · N k²)`` and returns
@@ -688,7 +686,7 @@ class GrassmannManifold:
         return bool(self.space.belongs(P))
 
 
-def validate_fast_matches_geomstats(N=None, k=None, n_pairs=8, seed=0,
+def check_frame_distance_against_geomstats(N=None, k=None, n_pairs=8, seed=0,
                                     frames=None, tol=1e-8):
     """Assert the fast principal-angle distance equals geomstats' canonical
     ``metric.dist`` on random (or supplied) frame pairs; return the max error.
@@ -708,7 +706,7 @@ def validate_fast_matches_geomstats(N=None, k=None, n_pairs=8, seed=0,
     man = GrassmannManifold(N, k)
     max_err = 0.0
     for a, b in zip(A, B):
-        d_fast = frame_distance(a, b, "canonical")
+        d_fast = frame_distance(a, b, "sqrt2_principal_angle")
         d_gs = man.dist(frame_to_projector(a), frame_to_projector(b))
         max_err = max(max_err, abs(d_fast - d_gs))
     assert max_err < tol, f"fast vs geomstats mismatch: {max_err:.2e}"

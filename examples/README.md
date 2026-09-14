@@ -1,37 +1,35 @@
 # examples/
 
-Runnable material for verifying and learning the library. Everything here uses
-synthetic or self-trained networks — **no bundled datasets required**.
+Runnable material for verifying an installation and learning the library. All
+examples use synthetic or self-trained networks; no datasets are required.
 
-## Detailed, narrated notebooks (executed, with plots)
+## Notebooks
 
-| notebook | lens | what it works out on one example |
+| notebook | tools | what it works out on one example |
 |---|---|---|
-| `example_ring_attractor.ipynb` | subspace / topology | A ring-attractor RNN with a rotating bump. Raw activity → PCA → Grassmannian embedding + reliability → drift & recurrence → Riemannian kinematics → tangent-PCA → **persistent homology** (the ℝP¹ loop) → `k` as a topological filter → DEC → direct-manifold cross-check. Narrates what each quantity means. |
-| `example_task_trained_rnn.ipynb` | pullback / dynamics | A vanilla RNN **trained** on evidence integration. Training → behaviour/psychometrics → population geometry → recurrent-Jacobian spectra & effective time constants → **slow points / line attractor** → readout vs input subspaces → state-space pullback metric → bridge back to the subspace lens. |
+| `example_ring_attractor.ipynb` | subspace trajectory, topology | A ring-attractor RNN with a rotating bump. Raw activity → PCA → Grassmannian embedding and the singular-value gap → distance from the initial subspace and recurrence → Riemannian kinematics → tangent PCA → persistent homology of the `ℝP¹` loop → dependence on `k` → discrete exterior calculus → comparison with the homology of the raw state distances. |
+| `example_task_trained_rnn.ipynb` | pullback metric, dynamics | A vanilla RNN trained on evidence integration. Training → behaviour and psychometrics → population geometry → recurrent-Jacobian spectra and effective time constants → slow points and the line attractor → readout versus input subspaces → state-space pullback metric → subspace trajectory of the same network. |
+| `neuralgeom_tour.ipynb` | all | A brief guided tour of the main analyses. |
 
-Outputs are stripped when these notebooks are committed (an `nbstripout` filter
-— see "Working on this repo" in the top-level README), so what you have here is
-the narrative and the code, not the figures. Run a notebook to regenerate them.
+Notebook outputs are stripped on commit, so the repository holds the narrative
+and the code; run a notebook to regenerate its figures. A Jupyter kernel is
+needed:
 
-**To re-run them** you need a Jupyter kernel in your env:
 ```bash
-pip install ipykernel            # then open in VS Code / Cursor and pick the neuralgeom kernel
-# or for browser Jupyter:
-pip install jupyterlab ipykernel
+pip install -e '.[notebook]'
 python -m ipykernel install --user --name neuralgeom
-jupyter lab
 ```
 
-## Scripts (no Jupyter needed)
+## Scripts
 
 | script | purpose |
 |---|---|
-| `check_env.py` | audit the current environment; per-package + per-lens verdict (usable / update / missing) |
-| `verify_all.py` | run **every** branch of the library and print PASS/SKIP/FAIL (add `--quick` for a fast pass) |
-| `quickstart.py` | the smallest end-to-end touch of both lenses |
+| `check_env.py` | audit the current environment: per-package versions and a verdict per feature group (works before `neuralgeom` is installed) |
+| `verify_all.py` | run a small check of every subpackage and print PASS / SKIP / FAIL (`--quick` for a faster pass) |
+| `quickstart.py` | the shortest end-to-end example |
 
 ```bash
 python examples/check_env.py
 python examples/verify_all.py
+python examples/quickstart.py
 ```

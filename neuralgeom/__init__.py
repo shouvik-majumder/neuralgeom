@@ -1,54 +1,56 @@
 """
-neuralgeom — geometry & topology of neural representations and dynamics.
-========================================================================
+neuralgeom — differential geometry and topology of neural population activity.
+==============================================================================
 
-A unified library merging two exploratory repositories: **PullbackMetric**
-(the pullback-metric / dynamics engine) and **ProjectiveSpaceModels** (the
-subspace / Grassmannian-trajectory + topology lens). Both are two views of one
-object — a batch of high-dimensional neural state trajectories — sharing the
-:class:`neuralgeom.data.Trajectory` contract.
+Tools for describing how neural representations and dynamics are organised
+geometrically: the pullback metric of a differentiable map, the Grassmannian
+trajectory of the subspace that activity occupies, and the persistent homology
+of that trajectory. Every analysis consumes one data object, the
+:class:`neuralgeom.data.Trajectory`, a batch of high-dimensional state
+trajectories with their time axis and metadata.
 
 Submodules:
 
-    neuralgeom.geometry   map-agnostic geometry toolbox (Jacobians, pullback
-                      metrics, output/Fisher-Rao metrics, readout maps,
-                      geodesics & curvature, volume/anisotropy, SPD and
-                      Grassmannian distances — incl. the closed-form frame /
-                      projector Grassmannian API used by the subspace lens)
-    neuralgeom.subspace   the subspace lens: sliding-window Grassmannian
-                      embedding, Riemannian kinematics (speed / covariant
-                      acceleration / curvature), Karcher mean, tangent-PCA,
-                      across-trial pooling — manifold-agnostic
+    neuralgeom.geometry   pullback metrics of differentiable maps (Jacobians,
+                          output / Fisher–Rao metrics, readout maps, geodesics
+                          and curvature, volume and anisotropy) and distances
+                          between metric tensors (SPD) and between subspaces
+                          (Grassmannian), for torch models and NumPy arrays
+    neuralgeom.subspace   sliding-window Grassmannian embedding of a
+                          trajectory, Riemannian kinematics (speed, covariant
+                          acceleration, curvature), Karcher mean, tangent PCA,
+                          across-trial pooling
     neuralgeom.topology   persistent homology (𝔽₂) on precomputed distance
-                      matrices, bottleneck fingerprints; optional DEC (dxtr)
-                      and direct-manifold cross-check
-    neuralgeom.data       self-sufficient loader for the recordings + adapters
-                      from arrays / synthetic dicts / TrialData, the shared
-                      PCA state space (incl. the split-half instrument),
-                      pluggable dimensionality reduction, condition builders
-    neuralgeom.synth      synthetic neural data from KNOWN dynamics: the paper
-                      2-attractor timing model and a low-rank rate RNN, with
-                      the noiseless latent kept as ground truth
-    neuralgeom.tasks      self-sufficient cognitive-task generation and RNN
-                      training
-    neuralgeom.dynamics   geometry of recurrent dynamics (recurrent/input
-                      Jacobians, fixed points, spectra) AND estimation of
-                      dynamics from data (LDS / cubic field, IV-corrected;
-                      input inference; Helmholtz split)
-    neuralgeom.viz        plotting style, PDF reports, rolling dashboard
+                          matrices, bottleneck distances; optional discrete
+                          exterior calculus and a comparison with state-space
+                          homology
+    neuralgeom.dynamics   geometry of recurrent dynamics (recurrent and input
+                          Jacobians, fixed points, spectra) and estimation of
+                          linear dynamics from data (instrumental-variable
+                          correction, input inference, Helmholtz decomposition)
+    neuralgeom.data       loaders and adapters (arrays, synthetic data,
+                          recordings), the shared PCA state space, pluggable
+                          dimensionality reduction, condition builders, and the
+                          Trajectory object with its HDF5 schema
+    neuralgeom.synth      synthetic data with known generating dynamics: a
+                          two-attractor model, low-rank rate RNNs, and
+                          connectivity-family rate RNNs
+    neuralgeom.tasks      cognitive tasks and supervised RNN training
+    neuralgeom.viz        plotting style, metric-field renderings, PDF reports
 
 plus three small shared modules:
 
-    neuralgeom.paths      where data and outputs live (single source of truth)
-    neuralgeom.fitting    the differentiable maps + trial-wise cross-validation
+    neuralgeom.paths      data and output locations
+    neuralgeom.fitting    differentiable readout maps and trial-wise
+                          cross-validation
     neuralgeom.stats      permutation tests and shuffle constructors
 
-THE ONE IDEA
-------------
-For a differentiable map f, the pullback metric g = J^T M J measures how f
+Motivation
+----------
+For a differentiable map f, the pullback metric g = Jᵀ M J measures how f
 distorts its domain: which directions are magnified, which are collapsed, and
-how that varies from point to point. rank(g) = dim(domain), so the choice of
-what to put in the domain determines how rich the geometry can be.
+how that varies from point to point. Since rank(g) = dim(domain), the choice
+of what to place in the domain determines how rich the geometry can be.
 
 Runnable analyses live in ``scripts/`` and tests in ``tests/``.
 """

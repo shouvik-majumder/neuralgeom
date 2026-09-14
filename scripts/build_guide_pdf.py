@@ -112,7 +112,7 @@ story += [
 cheat = Table([
     [P("<b>Module</b>", cell), P("<b>Object it computes</b>", cell),
      P("<b>Question it answers</b>", cell)],
-    [P("pullback_metric", cell),
+    [P("pullback metric", cell),
      P("metric tensor g<sub>x</sub> = J<sub>x</sub><super>T</super>"
        "J<sub>x</sub>, volume element, spectrum", cell),
      P("<i>How much</i> does the network stretch or squash space around "
@@ -150,7 +150,7 @@ story += [
       "map f from input space R<super>n</super> to an output or hidden "
       "space R<super>m</super>, and x is one input point."),
 
-    P("2.1 Differential objects (demo 1, pullback_metric)", h2),
+    P("2.1 Differential objects (demo 1, the pullback metric)", h2),
     deftable([
         ("Jacobian J<sub>x</sub>",
          "The m&#215;n matrix of first derivatives &#8706;f/&#8706;x: the "
@@ -361,7 +361,7 @@ story += [
 
 # --------------------------------------------------------------------------- #
 story += [
-    P("3. Demo 1 — pullback_metric: how much does space stretch?", h1),
+    P("3. Demo 1 — the pullback metric: how much does space stretch?", h1),
     fig("pb_step0_data_and_model.png", 5.9 * inch),
     P("<b>Step 0.</b> Raw material: the two-moons data (left) and the "
       "trained decision function (right; background color = predicted "
@@ -499,7 +499,7 @@ story += [
       "responds to relative conditioning; Bures to absolute scale.", caption),
     PageBreak(),
     fig("spd_step3_interpolation_swelling.png", 5.7 * inch),
-    P("<b>Step 3 — the key picture.</b> Interpolating between two metric "
+    P("<b>Step 3.</b> Interpolating between two metric "
       "tensors (t = 0 &#8594; 1) four ways. Naive entrywise averaging "
       "(top row, red — drawn 3.4&#215; smaller to fit!) balloons the "
       "determinant to ~40,000 when both endpoints have determinant "
@@ -521,7 +521,7 @@ story += [
       "“distance” you get after adding a small ridge &#949; grows like "
       "log(1/&#949;): the answer is an artifact of the ridge, not a "
       "property of the models. Bures–Wasserstein and the fixed-rank "
-      "PSD metric are the honest tools there; the fixed-rank metric "
+      "PSD metric are the appropriate tools there; the fixed-rank metric "
       "additionally decomposes into “range misalignment” + “spectral "
       "mismatch” (&#167;2.3), but it is a structure metric (triangle "
       "inequality not guaranteed), and no Fréchet mean is implemented "
@@ -558,7 +558,7 @@ story += [
       "reproduces the true gradient-magnitude landscape, including the "
       "grid of critical points where it vanishes. (volume_element itself "
       "warns here — rank(g) = 1 &lt; 2 — and returns this pseudo-volume; "
-      "the honest determinant is identically zero.)", caption),
+      "the true determinant is identically zero.)", caption),
     PageBreak(),
     fig("rg_step2_gradient_field.png", 4.7 * inch),
     P("<b>Step 2.</b> The row-space field (k = 1) drawn over the level "
@@ -569,7 +569,7 @@ story += [
       "— every column space is the same point on Gr(1,1), and the demo "
       "verifies the distance is identically 0.", caption),
     fig("rg_step3_validation.png"),
-    P("<b>Step 3 — the key picture.</b> Angle between the learned and the "
+    P("<b>Step 3.</b> Angle between the learned and the "
       "true gradient direction, over a region larger than the training "
       "support (cyan box). Inside the box the median error is 2.6&#176;; "
       "outside it jumps to 41&#176; and the histogram (right) becomes "
@@ -577,7 +577,7 @@ story += [
       "good as the fit, and no better: it cannot flag its own "
       "extrapolation failure.", caption),
     fig("rg_step4_fixed_rank.png"),
-    P("<b>Step 4.</b> Comparing these rank-1 metrics honestly with the "
+    P("<b>Step 4.</b> Comparing these rank-1 metrics with the "
       "fixed-rank PSD distance (&#167;2.3) along a diagonal transect. "
       "Left: consecutive distances decompose into the Grassmann part "
       "(the gradient direction <i>turning</i>) and the SPD part (the "
@@ -609,7 +609,7 @@ story += [
     fig("mx_step0_datasets.png"),
     P("<b>Step 0.</b> The three datasets with their fitted decision "
       "functions (all trained identically, with weight decay). With heavy "
-      "overlap, training accuracy honestly drops to ~0.83 — close to the "
+      "overlap, training accuracy drops to ~0.83 — close to the "
       "best achievable.", caption),
     fig("mx_step1_logit_volume.png"),
     P("<b>Step 1.</b> Logit-map log-volume fields. As overlap grows, the "
@@ -619,7 +619,7 @@ story += [
       "geometry records exactly that.", caption),
     PageBreak(),
     fig("mx_step2_uncertainty_pullback.png"),
-    P("<b>Step 2 — the key picture.</b> Left: predictive entropy of the "
+    P("<b>Step 2.</b> Left: predictive entropy of the "
       "moderate-overlap model. Middle: the purely geometric field "
       "|&#8711;p| from pulling back through the probability map — the "
       "same uncertain set, found without computing an entropy. Right: "
@@ -631,7 +631,7 @@ story += [
       "model (left column) has a smooth decision function and a single "
       "coherent volume ridge. The overfit model (right column; no weight "
       "decay, 5&#215; longer training, 100% train accuracy where ~85% is "
-      "the honest ceiling) carves islands around individual training "
+      "the attainable ceiling) carves islands around individual training "
       "points — and its log-volume field shatters into filaments snaking "
       "between memorized examples. Memorization is directly visible in "
       "the geometry.", caption),
@@ -680,7 +680,7 @@ story += [
       "hidden layers of large models, or two different models compared "
       "point-by-point.", box),
     P("Reading order for the code", h2),
-    P("<font face='Courier' size='9'>pullback_metric.py</font> — Jacobians "
+    P("<font face='Courier' size='9'>geometry/jacobian.py</font> — Jacobians "
       "and metrics (start here) &#8226; "
       "<font face='Courier' size='9'>grassmannian.py</font> — subspaces "
       "and principal angles &#8226; "

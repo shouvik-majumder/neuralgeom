@@ -1,6 +1,6 @@
 """
-pullback_metric.py
-==================
+neuralgeom.geometry.jacobian
+============================
 
 Riemannian geometry of neural representations via the pullback metric.
 
@@ -14,7 +14,7 @@ This module provides:
 
   * ``batch_jacobian``       — per-sample Jacobians J_x for a batch, via
                                ``torch.func`` (vmap + jacrev/jacfwd).
-  * ``pullback_metric``      — g_x = J_x^T J_x for each point in the batch.
+  * ``euclidean_pullback_metric``      — g_x = J_x^T J_x for each point in the batch.
   * ``volume_element``       — sqrt(det g_x), with a pseudo-determinant
                                (product of nonzero singular values) fallback
                                for rank-deficient metrics (e.g. m < n or
@@ -25,7 +25,7 @@ This module provides:
   * ``metric_spectrum``      — eigenvalues of g_x (= squared singular values
                                of J_x): local expansion factors along
                                principal input directions.
-  * ``PullbackGeometry``     — thin convenience wrapper; optionally exposes
+  * ``ModelPullbackGeometry``     — thin convenience wrapper; optionally exposes
                                the metric as a ``geomstats`` RiemannianMetric
                                for downstream geodesic/curvature machinery.
 
@@ -41,7 +41,7 @@ Example
 -------
 >>> model = torch.nn.Sequential(nn.Linear(2, 64), nn.Tanh(), nn.Linear(64, 10))
 >>> X = torch.randn(128, 2)
->>> geom = PullbackGeometry(model)
+>>> geom = ModelPullbackGeometry(model)
 >>> g = geom.metric(X)                 # (128, 2, 2)
 >>> vol = geom.volume_element(X)       # (128,)  sqrt(det g)
 >>> logvol = geom.log_volume_element(X)
@@ -72,11 +72,11 @@ except ImportError:
 
 __all__ = [
     "batch_jacobian",
-    "pullback_metric",
+    "euclidean_pullback_metric",
     "volume_element",
     "log_volume_element",
     "metric_spectrum",
-    "PullbackGeometry",
+    "ModelPullbackGeometry",
 ]
 
 ModelLike = Union[torch.nn.Module, Callable[[Tensor], Tensor]]
@@ -143,9 +143,9 @@ def batch_jacobian(
         Input batch. Flattened internally to (B, n); returned Jacobians are
         w.r.t. the flattened input.
     mode : {"auto", "rev", "fwd"}
-        Autodiff mode. "rev" (jacrev) costs O(m) VJPs — cheap when the output
+        Autodiff mode. "rev" (jacrev) costs O(m) VJPs — efficient when the output
         dim m is small (e.g. classifiers). "fwd" (jacfwd) costs O(n) JVPs —
-        cheap when the input dim n is small. "auto" picks by comparing m, n.
+        efficient when the input dim n is small. "auto" picks by comparing m, n.
     chunk_size : int, optional
         Passed to ``vmap`` to bound peak memory on large batches.
 
@@ -196,7 +196,7 @@ def _batch_jacobian_fallback(model: ModelLike, X: Tensor) -> Tensor:
 # --------------------------------------------------------------------------- #
 # 3. Pullback metric tensor
 # --------------------------------------------------------------------------- #
-def pullback_metric(
+def euclidean_pullback_metric(
     model: ModelLike,
     X: Tensor,
     *,
@@ -354,10 +354,10 @@ def metric_spectrum(
 
 
 # --------------------------------------------------------------------------- #
-# Convenience wrapper (+ optional geomstats bridge)
+# Convenience wrapper (+ optional geomstats interoperability)
 # --------------------------------------------------------------------------- #
 @dataclass
-class PullbackGeometry:
+class ModelPullbackGeometry:
     """Bundles the pullback-geometry operations for one model.
 
     Parameters
@@ -375,7 +375,7 @@ class PullbackGeometry:
         return batch_jacobian(self.model, X, mode=self.mode, chunk_size=self.chunk_size)
 
     def metric(self, X: Tensor) -> Tensor:
-        return pullback_metric(self.model, X, mode=self.mode, chunk_size=self.chunk_size)
+        return euclidean_pullback_metric(self.model, X, mode=self.mode, chunk_size=self.chunk_size)
 
     def volume_element(self, X: Tensor, **kw) -> Tensor:
         return volume_element(self.model, X, mode=self.mode, chunk_size=self.chunk_size, **kw)

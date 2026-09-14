@@ -1,10 +1,10 @@
-# Conda environment for neuralgeom (the unified geometry+topology library).
+# Conda environment for neuralgeom.
 #
 # numpy is pinned <2 because geomstats 2.8.0 (latest) does
 #     from numpy import (... trapz ...)
 # and numpy 2.0 removed np.trapz. geomstats declares numpy>=1.18.1 with NO
 # upper bound, so a resolver will install a broken combination silently.
-# ripser and persim are NOT the reason -- both work fine on numpy 2. Torch is core (the pullback/dynamics engine needs it).
+# ripser and persim are not the reason: both work on numpy 2. Torch is a core dependency.
 # The pip section carries the packages without reliable conda-forge builds.
 name: neuralgeom
 channels:
@@ -17,8 +17,8 @@ dependencies:
   - scikit-learn>=1.3
   - h5py>=3.7
   - matplotlib>=3.6
-  - pytorch>=2.0          # core: pullback / dynamics / tasks engine
-  # --- optional: closed-form manifold geometry (subspace lens) ---
+  - pytorch>=2.0          # core: geometry / dynamics / tasks
+  # --- optional: closed-form manifold geometry (subspace analyses) ---
   - geomstats>=2.7
   # --- optional: PDF reports ---
   - reportlab>=4.0
@@ -28,16 +28,11 @@ dependencies:
   - jupyterlab
   - pip
   - pip:
-      # optional: persistent homology (topology lens)
+      # optional: persistent homology
       - ripser>=0.6
       - persim>=0.3
       # optional: discrete exterior calculus (NOT 'pydec' — that is unrelated)
       - dxtr
       - pypdf>=3.0
-      # task environments -- the timing task is built directly on
-      # gymnasium. neurogym was REMOVED: it requires numpy==2.2.*,
-      # unsatisfiable against the numpy<2 pin that geomstats forces
-      # (geomstats 2.8.0 imports np.trapz, removed in numpy 2.0).
-      - gymnasium>=1.0
       # --- development ---
       - pytest>=7

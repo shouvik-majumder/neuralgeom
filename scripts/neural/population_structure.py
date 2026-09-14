@@ -1,6 +1,6 @@
 """
-STAGE 1 — Descriptive population structure, run on TWO epochs separately.
-=========================================================================
+population_structure.py — descriptive population structure on two epochs.
+==========================================================================
 
 Two analyses, never mixed:
 
@@ -13,7 +13,7 @@ Two analyses, never mixed:
 Everything here is descriptive. No metric, no model. The point is to know
 what the population does before asking what its geometry is.
 
-Run:  python stage1_population.py [SESSION_ID] [WINDOW_S]
+Run:  python scripts/neural/population_structure.py [SESSION_ID] [WINDOW_S]
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from neuralgeom.data.loader import load_session                       # noqa: E4
 
 SESSION = sys.argv[1] if len(sys.argv) > 1 else "SM259_20230417_g0"
 WINDOW = float(sys.argv[2]) if len(sys.argv) > 2 else 0.20
-FIG = fig_dir("neural_stage1")
+FIG = fig_dir("neural")
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 145, "font.size": 8,
                      "axes.titlesize": 8.5, "axes.labelsize": 8,
                      "axes.grid": True, "grid.alpha": 0.2,
@@ -109,7 +109,7 @@ def split_half_subspace_angle(X, k=5, n_rep=8, seed=0):
 
 
 # --------------------------------------------------------------------------- #
-print(f"=== STAGE 1: {SESSION} ===")
+print(f"=== population structure: {SESSION} ===")
 s_full = load_session(DATA_DIR / f"{SESSION}.h5")
 s_pre = s_full.prelick(WINDOW)
 print(f"  EPOCH B full   : {s_full.X.shape}  t {s_full.t[0]:.2f}..{s_full.t[-1]:.2f}s")
@@ -149,8 +149,8 @@ ax[2].axvline(WINDOW, color="C3", ls="--", label=f"window end {WINDOW}s")
 ax[2].set_xlabel("first lick time (s)"); ax[2].set_ylabel("trials")
 ax[2].legend()
 ax[2].set_title("Lick times; trials right of the line are kept")
-fig.suptitle("Stage 1.0 — choosing the pre-lick window (EPOCH A)", fontsize=10)
-save(fig, "s1_0_window_choice.png")
+fig.suptitle("Choosing the pre-lick window (epoch A)", fontsize=10)
+save(fig, "population_window_choice.png")
 
 # --------------------------------------------------------------------------- #
 for tag, s, title in EPOCHS:
@@ -231,8 +231,8 @@ for tag, s, title in EPOCHS:
     ax[1, 2].set_title("Encoding of lick TIME\n(epoch-mean activity)")
     note(ax[1, 2], f"|r|>0.1: {int((np.abs(r_lick)>0.1).sum())}/{s.n_units}",
          right=False)
-    fig.suptitle(f"Stage 1 — {title}", fontsize=10)
-    save(fig, f"s1_{tag}_structure.png")
+    fig.suptitle(title, fontsize=10)
+    save(fig, f"population_{tag}_structure.png")
 
 # --------------------------------------------------------------------------- #
 # Figure: direct side-by-side of the two epochs
@@ -254,7 +254,7 @@ ax[1].set_xlabel("PC"); ax[1].set_ylabel("cross-validated variance")
 ax[1].set_ylim(0, 1); ax[1].legend(); ax[1].set_title("Cross-validated")
 ax[2].set_xlabel("corr(unit, lick time)"); ax[2].set_ylabel("units")
 ax[2].legend(); ax[2].set_title("Lick-time encoding")
-fig.suptitle("Stage 1 — the two epochs side by side (never pooled)",
+fig.suptitle("The two epochs side by side (never pooled)",
              fontsize=10)
-save(fig, "s1_compare_epochs.png")
+save(fig, "population_compare_epochs.png")
 print("\nDone.")

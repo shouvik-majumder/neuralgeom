@@ -1,26 +1,21 @@
 """
-STAGE 3c — Permutation controls for the pullback metric field.
-==============================================================
+decoder_pullback_controls.py — permutation controls for the decoder pullback field.
+===================================================================================
 
-Stage 3b left one thing unresolved. The MLP and the linear decoder scored the
-same out-of-fold R^2 (+0.321 vs +0.326) in Epoch A, which says the map is
-effectively linear; yet the decoding axis grad f rotated by a median 58 deg
-across state space, which says it is not. Those cannot both be substantive.
-The likely resolution is that the gradient VARIATION is estimation noise — a
-near-linear model fitted to noisy data still has wobbly gradients — but
-Stage 3b had no way to test that.
+A near-linear decoder fitted to noisy data still has gradients that vary
+across state space, so the variation of the pullback metric field cannot be
+read as structure without a null. Every quantity reported from the field in
+decoder_pullback_field.py therefore gets its own null distribution here, not
+only the decoding R^2.
 
-Every quantity we report from the metric field therefore needs its own null,
-not just the decoding R^2. This script builds them.
-
-THE CONTROLS
+The controls
 ------------
 C1  SHUFFLED TARGET (trial-level permutation)
       Permute lick_time across trials; each trial keeps its own activity and
       its internal temporal structure. Breaks only the state -> behaviour
       link. Applied to EVERY reported quantity, not just R^2.
 
-C2  GRADIENT-VARIATION NULL              <- the one Stage 3b was missing
+C2  GRADIENT-VARIATION NULL
       Fit the identical model to C1-shuffled targets and measure how much its
       gradient rotates across state space. If the real model's rotation is no
       larger, the "curvature" is fitting noise. This is the decisive test for
@@ -42,20 +37,19 @@ C5  TRIAL-IDENTITY SHUFFLE WITHIN TIME BIN
       preserving the mean population trajectory and each bin's covariance.
       Isolates single-trial information from condition-average structure.
 
-WHAT IS TESTED AGAINST EACH NULL
---------------------------------
+Quantities tested against each null
+-----------------------------------
   R^2                     decoding performance
   median |grad f|         overall sensitivity scale
   spread of |grad f|      p95/p5 — does sensitivity vary across the field?
-  axis rotation           median angle to the field-mean axis (the Stage 3b
-                          open question)
+  axis rotation           median angle to the field-mean axis
   sensitivity-time corr   does sensitivity track time in the epoch?
 
 All nulls are run with the identical pipeline (trial-wise CV, PCA inside
 folds) and repeated N_NULL times to give a null distribution, from which an
 empirical two-sided p-value is computed for each statistic.
 
-Run:  python stage3c_controls.py [SESSION] [A|B] [N_NULL]
+Run:  python scripts/neural/decoder_pullback_controls.py [SESSION] [A|B] [N_NULL]
 """
 from __future__ import annotations
 
@@ -85,7 +79,7 @@ EPOCH = "B" if "B" in sys.argv[1:] else "A"
 N_NULL = int([a for a in sys.argv[1:] if a.isdigit()][0]) \
     if any(a.isdigit() for a in sys.argv[1:]) else 12
 WINDOW, KDEF, NFOLD, STEPS = 0.20, 10, 5, 200
-FIG = fig_dir("neural_stage3c")
+FIG = fig_dir("neural")
 torch.set_default_dtype(torch.float64)
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 145, "font.size": 8,
                      "axes.titlesize": 8.5, "axes.labelsize": 8,
@@ -115,7 +109,7 @@ def fit_mlp(H, y, hidden=32, steps=STEPS, lr=5e-3, wd=1e-4, seed=0,
 
 def run_pipeline(Z, y_trial, t_grid, k=KDEF, reducer="pca", linear=False,
                  nfold=NFOLD, seed=0):
-    """Identical to Stage 3b: pooled samples, CV by trial, PCA inside folds."""
+    """Identical to decoder_pullback_field.py: pooled samples, CV by trial, PCA inside folds."""
     ntr, T, _ = Z.shape
     rng = np.random.default_rng(seed)
     folds = np.array_split(rng.permutation(ntr), nfold)
@@ -172,13 +166,13 @@ else:
     tg = s.t
 y = s.lick.astype(float)
 ntr, T, _ = Z.shape
-print(f"STAGE 3c CONTROLS — {SESSION} ({s_full.group}) EPOCH {EPOCH}")
+print(f"decoder pullback controls — {SESSION} ({s_full.group}) EPOCH {EPOCH}")
 print(f"  {ntr} trials x {T} bins; {N_NULL} draws per null")
 print("=" * 74)
 
 # Cache: each null is expensive, so results accumulate across invocations.
 # Delete the .npz to force a recompute.
-CACHE = CACHE_DIR / f"stage3c_{SESSION}_{EPOCH}.npz"
+CACHE = CACHE_DIR / f"decoder_controls_{SESSION}_{EPOCH}.npz"
 _cache = dict(np.load(CACHE, allow_pickle=True)["d"].item()) if CACHE.exists() else {}
 
 
@@ -286,8 +280,8 @@ a.set_xlabel("angle between local decoding axis and field mean (deg)")
 a.set_ylabel("density"); a.legend(fontsize=7)
 a.set_title("THE DECISIVE PANEL — is the field's curvature real?\n"
             "if the two distributions overlap, the rotation is noise")
-fig.suptitle(f"Stage 3c — permutation controls for EVERY reported quantity.  "
+fig.suptitle(f"Permutation controls for every reported quantity.  "
              f"{SESSION} ({s_full.group}), EPOCH {EPOCH}, {N_NULL} draws per "
              f"null.  Red line = real data; grey = null draws.", fontsize=9.5)
-save(fig, f"s3c_{EPOCH}_controls.png")
+save(fig, f"decoder_controls_{EPOCH}.png")
 print("\nDone.")

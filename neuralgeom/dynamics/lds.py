@@ -1,6 +1,4 @@
-"""Conditioned linear dynamical systems + decomposition of the fitted dynamics.
-
-Design and rationale: ``docs/LDS_PIPELINE_PLAN.md``.  Constraints: ``docs/INSTRUCTIONS.md``.
+"""Conditioned linear dynamical systems and decomposition of the fitted dynamics.
 
 Three things live here.
 
@@ -11,21 +9,21 @@ Three things live here.
      M3  cubic field, linearized     A = dF/dz at a chosen state    (keeps the cubic generator)
 
 2. INPUT INFERENCE -- shared field + per-condition input, in two parameterizations
-   (``fit_shared_input_free``, ``fit_shared_input_lowrank``), plus the per-timepoint split of
-   the velocity into a field-driven and an input-driven part (``velocity_budget``).
+   (``fit_shared_input_free``, ``fit_shared_input_lowrank``), plus the per-sample projections of
+   the velocity onto the field term and the input term (``velocity_projections``).
 
 3. METRIC-AWARE POTENTIAL/ROTATIONAL SPLIT (``helmholtz_split``, ``metric_dependence``).
    The split is NOT unique -- 'gradient' is defined only relative to a metric M:
 
        A = A_grad + A_rot,   A_grad = M^-1 Sym(MA),   A_rot = M^-1 Skew(MA)
        dz/dt|_grad = -M^-1 grad V(z),   V(z) = -1/2 z^T Sym(MA) z - (M b)^T z
-       A_rot conserves the M-energy 1/2 z^T M z.
+       A_rot conserves the quadratic form 1/2 z^T M z.
 
-   M = I reproduces the classic S/W split used in ``demo_metriplectic_linear.py``;
+   M = I gives the classical symmetric / antisymmetric split of A;
    M = Sigma^-1 gives the data-adapted (Mahalanobis) split.
 
 Every fit reports a trial-grouped cross-validated velocity R^2 and, on request, a within-trial
-roll-shuffle null.  Nothing here plots; the demos do that.
+roll-shuffle null.  Plotting is left to the scripts.
 
 Self-test:  python -m neuralgeom.dynamics.lds
 """
@@ -40,8 +38,8 @@ __all__ = [
     "trial_velocities", "r2_score_multi",
     "fit_lds", "fit_sliding_lds", "fit_cubic_field", "cubic_predict", "linearize_cubic",
     "helmholtz_split", "metric_dependence", "potential",
-    "fit_shared_input_free", "fit_shared_input_lowrank", "velocity_budget",
-    "behavior_relevant_fraction", "shuffle_null_r2",
+    "fit_shared_input_free", "fit_shared_input_lowrank", "velocity_projections",
+    "norm_fraction_in_top_metric_eigenspace", "shuffle_null_r2",
 ]
 
 
@@ -196,9 +194,10 @@ def shuffle_null_r2(fit_fn, Z, V, groups, n_shuffle=20, seed=0):
 def fit_lds(Z, V, groups=None, ridge=1e-3, cv=True, instrument=None):
     """dz/dt = A z + b, ridge least squares (the intercept is NOT penalized).
 
-    Returns dict: A, b, cv_r2, r2_in, fixed_point, eig, strength, rotation, n.
-      strength = -mean Re eig(A)   (>0: contracting toward the fixed point)
-      rotation = median |Im eig(A)| (rad/s)
+    Returns dict: A, b, cv_r2, r2_train, fixed_point, eig, mean_negative_real_eigenvalue,
+    median_abs_imag_eigenvalue, max_real_eigenvalue, n.
+      mean_negative_real_eigenvalue = -mean Re eig(A)    (>0: contracting on average)
+      median_abs_imag_eigenvalue    = median |Im eig(A)| (rad/s, rotation rate)
 
     ``instrument`` (n, D): if given, A and b are estimated by INSTRUMENTAL VARIABLES
     (two-stage least squares) instead of OLS,
@@ -229,11 +228,11 @@ def fit_lds(Z, V, groups=None, ridge=1e-3, cv=True, instrument=None):
     except np.linalg.LinAlgError:
         zfix = np.full(Z.shape[1], np.nan)
     out = dict(A=A, b=b, eig=ev,
-               strength=float(-np.mean(ev.real)),
-               rotation=float(np.median(np.abs(ev.imag))),
-               max_real=float(np.max(ev.real)),        # >0 => an UNSTABLE direction exists,
-               fixed_point=zfix,                       # so strength>0 alone is not an attractor
-               r2_in=r2_score_multi(V, D @ W), n=len(Z))
+               mean_negative_real_eigenvalue=float(-np.mean(ev.real)),
+               median_abs_imag_eigenvalue=float(np.median(np.abs(ev.imag))),
+               max_real_eigenvalue=float(np.max(ev.real)),   # >0 => an unstable direction exists, so a
+               fixed_point=zfix,                             # positive mean alone does not imply an attractor
+               r2_train=r2_score_multi(V, D @ W), n=len(Z))
     if Wi is not None:
         # WEAK-INSTRUMENT DIAGNOSTIC.  2SLS with a weak instrument is biased BACK toward OLS,
         # so these first-stage R^2 values must be reported with any IV estimate.
@@ -287,14 +286,15 @@ def fit_sliding_lds(Z, V, tindex, groups=None, centers=None, halfwidth=3,
         m = np.abs(tindex - c) <= halfwidth
         if m.sum() < min_samples_per_dim * Dd:
             rows.append(dict(center=int(c), n=int(m.sum()), A=None, b=None,
-                             strength=np.nan, rotation=np.nan, max_real=np.nan,
+                             strength=np.nan, rotation=np.nan, max_real_eigenvalue=np.nan,
                              fixed_point=np.full(Dd, np.nan), cv_r2=np.nan))
             continue
         g = None if groups is None else np.asarray(groups)[m]
         f = fit_lds(Z[m], V[m], groups=g, ridge=ridge, cv=g is not None)
         rows.append(dict(center=int(c), n=int(m.sum()), A=f["A"], b=f["b"],
-                         strength=f["strength"], rotation=f["rotation"],
-                         max_real=float(np.max(f["eig"].real)),
+                         mean_negative_real_eigenvalue=f["mean_negative_real_eigenvalue"],
+                         median_abs_imag_eigenvalue=f["median_abs_imag_eigenvalue"],
+                         max_real_eigenvalue=float(np.max(f["eig"].real)),
                          fixed_point=f["fixed_point"], cv_r2=f["cv_r2"]))
     return rows
 
@@ -312,7 +312,7 @@ def fit_cubic_field(Z, V, degree=3, ridge=2.0, groups=None, cv=True):
     poly = PolynomialFeatures(degree=degree, include_bias=True)
     P = poly.fit_transform(Z)
     W = _ridge_solve(P, V, ridge)
-    out = dict(W=W, poly=poly, degree=degree, r2_in=r2_score_multi(V, P @ W), n=len(Z))
+    out = dict(W=W, poly=poly, degree=degree, r2_train=r2_score_multi(V, P @ W), n=len(Z))
     out["cv_r2"] = _cv_r2(P, V, groups, ridge) if (cv and groups is not None) else float("nan")
     return out
 
@@ -341,8 +341,8 @@ def linearize_cubic(fit, z0, eps=1e-3):
         zfix = np.linalg.solve(A, -b)
     except np.linalg.LinAlgError:
         zfix = np.full(Dd, np.nan)
-    return dict(A=A, b=b, eig=ev, strength=float(-np.mean(ev.real)),
-                rotation=float(np.median(np.abs(ev.imag))), fixed_point=zfix, z0=z0)
+    return dict(A=A, b=b, eig=ev, mean_negative_real_eigenvalue=float(-np.mean(ev.real)),
+                median_abs_imag_eigenvalue=float(np.median(np.abs(ev.imag))), fixed_point=zfix, z0=z0)
 
 
 def cubic_fixed_point(fit, z0, n_iter=60, tol=1e-9):
@@ -370,16 +370,17 @@ def helmholtz_split(A, b=None, M=None, Z=None, V=None):
         A_grad = M^-1 Sym(MA),  A_rot = M^-1 Skew(MA)
         V(z)   = -1/2 z^T Sym(MA) z - (M b)^T z          so   A_grad z + b = -M^-1 grad V
 
-    NOTE on interpretation: A_rot conserves the M-energy (1/2) z^T M z, but it does NOT conserve
-    V.  This is an M-orthogonal decomposition of the generator, not an energy-conserving
-    metriplectic split: the rotational part does carry the state across level sets of V.
+    Note on interpretation: A_rot conserves the quadratic form (1/2) z^T M z, but it does not
+    conserve V. This is an M-orthogonal decomposition of the generator; the rotational part
+    does carry the state across level sets of V.
 
     M defaults to the identity (the classic S = (A+A^T)/2, W = (A-A^T)/2 split).
-    Fractions are computed on MA -- the object that actually lives in the metric -- so results
-    under different metrics are on the same footing; grad_frac^2 + rot_frac^2 = 1.
+    The two norm fractions ||Sym(MA)||_F / ||MA||_F and ||Skew(MA)||_F / ||MA||_F are computed on
+    MA, the object that lives in the metric, so results under different metrics are comparable;
+    their squares sum to 1.
 
-    If measured (Z, V) are supplied, also returns the median M-cosine between the measured
-    velocity and the downhill direction -M^-1 grad V (>0 means the motion descends V).
+    If measured (Z, V) are supplied, also returns ``median_cosine_velocity_vs_negative_gradient``,
+    the median M-cosine between the measured velocity and -M^-1 grad V (>0: the motion descends V).
     """
     A = np.asarray(A, float)
     Dd = A.shape[0]
@@ -387,7 +388,7 @@ def helmholtz_split(A, b=None, M=None, Z=None, V=None):
     b = np.zeros(Dd) if b is None else np.asarray(b, float).ravel()
     if np.linalg.eigvalsh((M + M.T) / 2).min() <= 0:
         raise ValueError("helmholtz_split: the metric M must be symmetric positive definite "
-                         "(otherwise 'downhill' and the conserved M-energy are meaningless)")
+                         "(otherwise 'downhill' and the conserved quadratic form are meaningless)")
 
     MA = M @ A
     Sym = (MA + MA.T) / 2
@@ -398,8 +399,8 @@ def helmholtz_split(A, b=None, M=None, Z=None, V=None):
 
     nMA = np.linalg.norm(MA) + 1e-300
     out = dict(M=M, A_grad=A_grad, A_rot=A_rot, Sym=Sym, Skew=Skew,
-               grad_frac=float(np.linalg.norm(Sym) / nMA),
-               rot_frac=float(np.linalg.norm(Skew) / nMA),
+               symmetric_part_norm_fraction=float(np.linalg.norm(Sym) / nMA),
+               antisymmetric_part_norm_fraction=float(np.linalg.norm(Skew) / nMA),
                eig_sym=np.linalg.eigvalsh(Sym),          # potential curvature; <0 => convex bowl
                eig_skew=np.linalg.eigvals(Skew),         # pure imaginary => rotation rates
                convex=bool(np.all(np.linalg.eigvalsh(Sym) < 0)),
@@ -418,7 +419,7 @@ def helmholtz_split(A, b=None, M=None, Z=None, V=None):
         num = np.einsum("ni,ij,nj->n", V, M, down)
         nv = np.sqrt(np.maximum(np.einsum("ni,ij,nj->n", V, M, V), 1e-300))
         nd = np.sqrt(np.maximum(np.einsum("ni,ij,nj->n", down, M, down), 1e-300))
-        out["cos_descend"] = float(np.median(num / (nv * nd)))
+        out["median_cosine_velocity_vs_negative_gradient"] = float(np.median(num / (nv * nd)))
     return out
 
 
@@ -432,7 +433,7 @@ def metric_dependence(A, b, Sigma, alphas=None, Z=None, V=None, eps=1e-6):
     """How much is 'the flow is mostly gradient' a property of the flow vs of the metric?
 
     Interpolates M(alpha) = (1-alpha) I + alpha Sigma^-1 (both normalized to unit mean
-    eigenvalue so alpha is a fair mixture) and reports grad_frac along the path.
+    eigenvalue so alpha is a fair mixture) and reports symmetric_part_norm_fraction along the path.
     """
     Dd = A.shape[0]
     Sigma = np.asarray(Sigma, float) + eps * np.eye(Dd)
@@ -444,8 +445,8 @@ def metric_dependence(A, b, Sigma, alphas=None, Z=None, V=None, eps=1e-6):
     for a in alphas:
         M = (1 - a) * I + a * Sinv
         s = helmholtz_split(A, b, M, Z=Z, V=V)
-        rows.append(dict(alpha=float(a), grad_frac=s["grad_frac"], rot_frac=s["rot_frac"],
-                         convex=s["convex"], cos_descend=s.get("cos_descend", np.nan)))
+        rows.append(dict(alpha=float(a), symmetric_part_norm_fraction=s["symmetric_part_norm_fraction"], antisymmetric_part_norm_fraction=s["antisymmetric_part_norm_fraction"],
+                         convex=s["convex"], median_cosine_velocity_vs_negative_gradient=s.get("median_cosine_velocity_vs_negative_gradient", np.nan)))
     return rows
 
 
@@ -512,7 +513,7 @@ def fit_shared_input_free(Z, V, cond, tau_s, groups=None, field="lds", input_bin
                  else dict(A=Wf[:-1].T, b=Wf[-1]))
     out = dict(field_kind=field, field=field_fit, I=I, I_centered=I_centered,
                tau=(ktab + 0.5) * input_bin_s, conds=conds, design=Des, W=W,
-               r2_in=r2_score_multi(V, Des @ W),
+               r2_train=r2_score_multi(V, Des @ W),
                input_norm=np.linalg.norm(I, axis=2),                 # (n_cond, n_tau)
                input_norm_centered=np.linalg.norm(I_centered, axis=2),
                impulse=I.sum(1) * input_bin_s)                        # (n_cond, D)
@@ -521,7 +522,7 @@ def fit_shared_input_free(Z, V, cond, tau_s, groups=None, field="lds", input_bin
     if field != "cubic":
         A, b = field_fit["A"], field_fit["b"]
         ev = np.linalg.eigvals(A)
-        out["strength"] = float(-np.mean(ev.real)); out["rotation"] = float(np.median(np.abs(ev.imag)))
+        out["mean_negative_real_eigenvalue"] = float(-np.mean(ev.real)); out["median_abs_imag_eigenvalue"] = float(np.median(np.abs(ev.imag)))
         out["eig"] = ev
     return out
 
@@ -606,10 +607,10 @@ def fit_shared_input_lowrank(Z, V, cond, tau_s, groups=None, rank=2, input_bin_s
     W = np.vstack([A.T, b[None, :], B.T])
     ev = np.linalg.eigvals(A)
     out = dict(A=A, b=b, B=B, U=U, conds=conds, tau=(np.arange(max(n_tau, 1)) + 0.5) * input_bin_s,
-               rank=rank, r2_in=r2_score_multi(V, Des @ W),
+               rank=rank, r2_train=r2_score_multi(V, Des @ W),
                amplitude=np.linalg.norm(U, axis=2),                 # (n_cond, n_tau)
-               eig=ev, strength=float(-np.mean(ev.real)),
-               rotation=float(np.median(np.abs(ev.imag))),
+               eig=ev, mean_negative_real_eigenvalue=float(-np.mean(ev.real)),
+               median_abs_imag_eigenvalue=float(np.median(np.abs(ev.imag))),
                I=np.einsum("dr,ctr->ctd", B, U))
     out["I_centered"] = out["I"] - out["I"].mean(0, keepdims=True)
     out["input_variation"] = float(np.std(out["I"].sum(1) - out["I"].sum(1).mean(0)))
@@ -619,7 +620,7 @@ def fit_shared_input_lowrank(Z, V, cond, tau_s, groups=None, rank=2, input_bin_s
         # invariant); the absolute value shifts with the initialization.
         out["angle"] = np.arctan2(U[..., 1], U[..., 0])
     if cv and groups is not None:
-        # honest CV: refit the WHOLE alternating fit (including u) on the training folds.
+        # full CV: refit the whole alternating fit (including u) on the training folds.
         # Reusing a U estimated on all samples leaks the held-out data and lets a spurious
         # input model beat the no-input baseline.
         groups = np.asarray(groups)
@@ -645,20 +646,21 @@ def fit_shared_input_lowrank(Z, V, cond, tau_s, groups=None, rank=2, input_bin_s
     return out
 
 
-def velocity_budget(Z, V, A, b, I_samples):
-    """Per-timepoint split of the measured velocity into field-driven and input-driven parts.
+def velocity_projections(Z, V, A, b, I_samples):
+    """Per-sample projections of the measured velocity onto the field term A z + b and the input term.
 
     ``I_samples`` is the fitted input at each sample (n, D) -- zero before cue onset.
     Returns, per sample:
-      field_share / input_share : projections onto the measured velocity, <v, term>/||v||^2
-                                  (they sum to ~1 where the model fits well),
-      field_norm / input_norm   : magnitudes of the two terms.
+      field_fraction / input_fraction : <v, term> / ||v||^2, the fraction of the measured velocity
+                                        accounted for by each term (they sum to ~1 where the
+                                        model fits well),
+      field_norm / input_norm         : Euclidean norms of the two terms.
     """
     Z = np.asarray(Z, float); V = np.asarray(V, float); I_samples = np.asarray(I_samples, float)
     Fterm = Z @ np.asarray(A, float).T + np.asarray(b, float)
     v2 = np.maximum(np.sum(V * V, axis=1), 1e-300)
-    return dict(field_share=np.sum(V * Fterm, axis=1) / v2,
-                input_share=np.sum(V * I_samples, axis=1) / v2,
+    return dict(field_fraction=np.sum(V * Fterm, axis=1) / v2,
+                input_fraction=np.sum(V * I_samples, axis=1) / v2,
                 field_norm=np.linalg.norm(Fterm, axis=1),
                 input_norm=np.linalg.norm(I_samples, axis=1),
                 field_term=Fterm, input_term=I_samples)
@@ -667,11 +669,11 @@ def velocity_budget(Z, V, A, b, I_samples):
 # ======================================================================================
 # behavior link
 # ======================================================================================
-def behavior_relevant_fraction(component, g, k=1, eps=1e-12):
-    """Fraction of a dynamical component that lies in the behavior-relevant subspace.
+def norm_fraction_in_top_metric_eigenspace(component, g, k=1, eps=1e-12):
+    """Fraction of each vector's norm lying in the span of the top-k eigenvectors of a metric.
 
     ``g`` is the (state-space) pullback metric g = J^T g_Y J; its top-k eigenvectors span the
-    directions behavior is sensitive to.  Returns ||P_g x|| / ||x|| per row of ``component``.
+    directions the readout is most sensitive to.  Returns ||P_g x|| / ||x|| per row of ``component``.
     Chance level for random vectors in D dimensions is sqrt(k/D) -- report it alongside.
     """
     component = np.atleast_2d(np.asarray(component, float))
@@ -697,8 +699,8 @@ def _selftest():
     assert np.allclose(sp["Sym"], S_true, atol=1e-10), sp["Sym"]
     assert np.allclose(sp["Skew"], W_true, atol=1e-10)
     assert sp["convex"]
-    print(f"   Sym/Skew recovered exactly; grad_frac={sp['grad_frac']:.3f} "
-          f"rot_frac={sp['rot_frac']:.3f} (sum of squares={sp['grad_frac']**2+sp['rot_frac']**2:.3f})")
+    print(f"   Sym/Skew recovered exactly; symmetric_part_norm_fraction={sp['symmetric_part_norm_fraction']:.3f} "
+          f"antisymmetric_part_norm_fraction={sp['antisymmetric_part_norm_fraction']:.3f} (sum of squares={sp['symmetric_part_norm_fraction']**2+sp['antisymmetric_part_norm_fraction']**2:.3f})")
 
     print("2) metric-aware split: a flow that is PURE GRADIENT under M, not under I")
     M = np.array([[4.0, 2.2, 0.0], [2.2, 1.6, 0.0], [0.0, 0.0, 1.0]])
@@ -706,8 +708,8 @@ def _selftest():
     A_M = -np.linalg.inv(M) @ H                    # exact M-gradient flow
     e = helmholtz_split(A_M, M=np.eye(3))
     m = helmholtz_split(A_M, M=M)
-    print(f"   grad_frac under Euclidean = {e['grad_frac']:.3f}   under M = {m['grad_frac']:.3f}")
-    assert m["grad_frac"] > 0.999 and e["grad_frac"] < 0.999
+    print(f"   symmetric_part_norm_fraction under Euclidean = {e['symmetric_part_norm_fraction']:.3f}   under M = {m['symmetric_part_norm_fraction']:.3f}")
+    assert m["symmetric_part_norm_fraction"] > 0.999 and e["symmetric_part_norm_fraction"] < 0.999
     assert np.allclose(m["Skew"], 0, atol=1e-10)
     print("   -> confirms the split is metric-dependent (the point of metric_dependence()).")
 
@@ -726,8 +728,8 @@ def _selftest():
     f = fit_lds(d["Z"], d["V"], groups=d["group"])
     err = np.linalg.norm(f["A"] - A_true) / np.linalg.norm(A_true)
     print(f"   ||A_hat - A||/||A|| = {err:.4f}, CV R2 = {f['cv_r2']:.3f}, "
-          f"strength = {f['strength']:.3f} (true {-np.mean(np.linalg.eigvals(A_true).real):.3f}), "
-          f"rotation = {f['rotation']:.2f} (true 3.00)")
+          f"strength = {f['mean_negative_real_eigenvalue']:.3f} (true {-np.mean(np.linalg.eigvals(A_true).real):.3f}), "
+          f"rotation = {f['median_abs_imag_eigenvalue']:.2f} (true 3.00)")
     assert err < 0.05 and f["cv_r2"] > 0.9
     null_m, null_s = shuffle_null_r2(
         lambda Z, V, g: fit_lds(Z, V, groups=g)["cv_r2"], d["Z"], d["V"], d["group"], n_shuffle=5)
@@ -789,24 +791,24 @@ def _selftest():
         ci = list(fa["conds"]).index(Ci[i])
         if kb[i] < fa["I"].shape[1]:
             Isamp[i] = fa["I"][ci, kb[i]]
-    bud = velocity_budget(Zi, Vi, fa["field"]["A"], fa["field"]["b"], Isamp)
+    bud = velocity_projections(Zi, Vi, fa["field"]["A"], fa["field"]["b"], Isamp)
     early = TAUi < 0.2; late_m = TAUi > 0.6
-    print(f"   input share of velocity: during cue {np.median(bud['input_share'][early]):+.2f}, "
-          f"later {np.median(bud['input_share'][late_m]):+.2f}")
-    print(f"   field share of velocity: during cue {np.median(bud['field_share'][early]):+.2f}, "
-          f"later {np.median(bud['field_share'][late_m]):+.2f}")
-    assert np.median(bud["input_share"][early]) > np.median(bud["input_share"][late_m])
+    print(f"   input share of velocity: during cue {np.median(bud['input_fraction'][early]):+.2f}, "
+          f"later {np.median(bud['input_fraction'][late_m]):+.2f}")
+    print(f"   field share of velocity: during cue {np.median(bud['field_fraction'][early]):+.2f}, "
+          f"later {np.median(bud['field_fraction'][late_m]):+.2f}")
+    assert np.median(bud["input_fraction"][early]) > np.median(bud["input_fraction"][late_m])
 
     g = np.outer([1.0, 0, 0], [1.0, 0, 0])       # behavior sensitive only to dim 0
-    frac_grad = behavior_relevant_fraction(Zi @ sp["A_grad"].T, g, k=1).mean()
-    frac_rot = behavior_relevant_fraction(Zi @ sp["A_rot"].T, g, k=1).mean()
+    frac_grad = norm_fraction_in_top_metric_eigenspace(Zi @ sp["A_grad"].T, g, k=1).mean()
+    frac_rot = norm_fraction_in_top_metric_eigenspace(Zi @ sp["A_rot"].T, g, k=1).mean()
     print(f"   behavior-relevant fraction: gradient part {frac_grad:.2f}, rotational part "
           f"{frac_rot:.2f}, chance = {np.sqrt(1/3):.2f}")
 
     print("7) OBSERVATION-NOISE BIAS: finite-difference OLS invents symmetric contraction")
     tru = helmholtz_split(A_true)
     print(f"   truth: strength={-np.mean(np.linalg.eigvals(A_true).real):.2f}, "
-          f"grad_frac={tru['grad_frac']:.2f}, rot_frac={tru['rot_frac']:.2f}, "
+          f"symmetric_part_norm_fraction={tru['symmetric_part_norm_fraction']:.2f}, antisymmetric_part_norm_fraction={tru['antisymmetric_part_norm_fraction']:.2f}, "
           f"convex={tru['convex']}")
     for obs in (0.0, 0.05, 0.15):
         noisy = [tr + obs * rng.normal(size=tr.shape) for tr in trials]
@@ -816,9 +818,9 @@ def _selftest():
         di = trial_velocities(noisy, dt, gap=2, smooth_bins=0.0, inst_lag=3)
         fi = fit_lds(di["Z"], di["V"], cv=False, instrument=di["Zinst"])
         si = helmholtz_split(fi["A"])
-        print(f"   obs noise {obs:.2f}:  OLS strength={fo['strength']:6.2f} "
-              f"grad={so['grad_frac']:.2f} convex={str(so['convex']):5s} | "
-              f"IV  strength={fi['strength']:6.2f} grad={si['grad_frac']:.2f} "
+        print(f"   obs noise {obs:.2f}:  OLS strength={fo['mean_negative_real_eigenvalue']:6.2f} "
+              f"grad={so['symmetric_part_norm_fraction']:.2f} convex={str(so['convex']):5s} | "
+              f"IV  strength={fi['mean_negative_real_eigenvalue']:6.2f} grad={si['symmetric_part_norm_fraction']:.2f} "
               f"err={np.linalg.norm(fi['A']-A_true)/np.linalg.norm(A_true):.3f}")
     # with substantial observation noise, OLS must be badly biased and IV must not be
     noisy = [tr + 0.15 * rng.normal(size=tr.shape) for tr in trials]

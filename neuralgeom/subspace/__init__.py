@@ -1,37 +1,38 @@
 """
-neuralgeom.subspace — the subspace-trajectory lens (Grassmannian embedding + kinematics).
-=========================================================================================
+neuralgeom.subspace — subspace trajectories on the Grassmannian.
+================================================================
 
-Track the k-dimensional subspace a high-dimensional trajectory locally occupies
-as a point on the Grassmannian ``Gr(k, N)`` (``Gr(1, N) = ℝPᴺ⁻¹``), and study how
-that point *moves*. Ported from ProjectiveSpaceModels, refactored onto the
-:class:`~neuralgeom.data.trajectory.Trajectory` contract and the shared
-Grassmannian geometry in :mod:`neuralgeom.geometry.grassmann`.
+Track the k-dimensional subspace that a high-dimensional trajectory locally
+occupies as a point on the Grassmannian ``Gr(k, N)`` (``Gr(1, N) = ℝPᴺ⁻¹``)
+and describe how that point moves. Consumes a
+:class:`~neuralgeom.data.trajectory.Trajectory` and the Grassmannian geometry
+in :mod:`neuralgeom.geometry.grassmann`.
 
-    embed.py       sliding-window SVD → frames on Gr(k, N); frame reliability
-                   (sv_gap); subspace-drift curves
+    embed.py       sliding-window SVD → frames on Gr(k, N); singular-value
+                   gap; geodesic distance from the initial subspace
     kinematics.py  Riemannian speed / covariant acceleration / curvature;
-                   Karcher mean; tangent-PCA (intrinsic dimensionality);
-                   chordal-vs-geodesic; transported velocity field
-    pooling.py     pool frames + scalar fields across trials (feeds topology/DEC)
+                   Karcher mean; tangent PCA (intrinsic dimensionality);
+                   chordal vs geodesic distances; transported velocity field
+    pooling.py     pool frames and scalar fields across trials
 
-Everything here is manifold-agnostic (it calls only the Manifold interface), so
-the same pipeline applies to any manifold — the Grassmannian by default, an SPD
-covariance manifold as the planned companion lens.
+The routines call only the generic manifold interface (dist / log / exp /
+norm / inner_product / parallel_transport), so they apply to any Riemannian
+manifold that exposes it; the Grassmannian is the default.
 
-The topological half of this lens (persistent homology, bottleneck, DEC) lives
-in :mod:`neuralgeom.topology`.
+Topological analysis of these trajectories (persistent homology, bottleneck
+distances, discrete exterior calculus) lives in :mod:`neuralgeom.topology`.
 """
+from ..geometry.grassmann import frame_distance_matrix
 from .embed import (EmbedConfig, embed_trajectory, embed_from_trajectory,
-                    frames_distance_matrix, subspace_drift)
+                    distance_from_start)
 from .kinematics import (KinConfig, compute_kinematics, karcher_mean,
-                         tangent_pca, chordal_geodesic, transported_velocities)
-from .pooling import PoolConfig, pool_frames, reconstruct_drive
+                         tangent_pca, chordal_vs_geodesic, transported_velocities)
+from .pooling import PoolConfig, pool_frames, input_magnitude_at
 
 __all__ = [
     "EmbedConfig", "embed_trajectory", "embed_from_trajectory",
-    "frames_distance_matrix", "subspace_drift",
+    "frame_distance_matrix", "distance_from_start",
     "KinConfig", "compute_kinematics", "karcher_mean", "tangent_pca",
-    "chordal_geodesic", "transported_velocities",
-    "PoolConfig", "pool_frames", "reconstruct_drive",
+    "chordal_vs_geodesic", "transported_velocities",
+    "PoolConfig", "pool_frames", "input_magnitude_at",
 ]

@@ -1,4 +1,5 @@
-"""Module 2 demo (REAL data): which population-activity direction controls lick timing?
+"""Pullback metric of a lick-time readout on recorded population activity: which population-activity
+direction controls lick timing?
 
 state x = PCA of post-cue firing rates
 readout f: x -> predicted time-to-lick   (ridge; linear so the Jacobian is exactly the weights)

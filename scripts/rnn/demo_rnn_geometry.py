@@ -50,7 +50,7 @@ from neuralgeom.tasks import run_trials                                    # noq
 from neuralgeom.dynamics.rnn import (find_slow_points, input_jacobian,    # noqa: E402
                           jacobian_spectrum, participation_ratio,
                           readout_subspace, recurrent_jacobian,
-                          state_pullback_metric, subspace_alignment,
+                          recurrent_update_pullback_metric, subspace_alignment,
                           trajectory_subspaces)
 from train_rnn_models import load_or_train                    # noqa: E402
 
