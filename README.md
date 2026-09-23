@@ -59,3 +59,7 @@ pullback-metric and dynamics tools), a short tour, and a quickstart script.
 
 - [docs/methods.md](docs/methods.md): definitions of every computed quantity.
 - [docs/data_format.md](docs/data_format.md): the `Trajectory` object and its HDF5 schema.
+
+## License
+
+MIT; see [LICENSE](LICENSE).
