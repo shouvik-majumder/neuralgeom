@@ -7,7 +7,7 @@ a map x -> f(x). For an RNN the relevant map is the **one-step update**
 
     h_{t+1} = F(h_t, x_t)
 
-and there are two derivatives worth taking at every point of a trajectory:
+with two derivatives along a trajectory:
 
     J^rec = dF/dh   (hidden x hidden)  — how the network's own state evolves
     J^inp = dF/dx   (hidden x input)   — how new evidence enters the state

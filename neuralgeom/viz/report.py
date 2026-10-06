@@ -1,10 +1,9 @@
 """
-neuralgeom.viz.report — the PDF report builder used by every write-up.
+neuralgeom.viz.report — PDF report builder.
 =================================================================
 
 A thin wrapper over reportlab: title, headings, paragraphs, highlighted
-boxes, tables, definition lists and captioned figures. Extracted from the
-per-experiment helper module so all reports share one implementation.
+boxes, tables, definition lists and captioned figures.
 
     rep = Report(PDF_DIR / "out.pdf", "Title", "subtitle")
     rep.h1("Section").p("text").figure(path, "caption").build()

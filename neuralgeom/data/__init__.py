@@ -3,8 +3,8 @@ neuralgeom.data — loaders, adapters, dimensionality reduction and the Trajecto
 ========================================================================================
 
     loader.py     HDF5 -> Session (trials x time x units), epoch masks,
-                  lick-time conditions. Verifies the response_type coding on
-                  every load and drops fields known to be meaningless.
+                  lick-time conditions. Checks the response_type coding on
+                  every load; see ``DROPPED_FIELDS`` for fields not exposed.
     adapters.py   alternative constructors for a Session: plain arrays, the synthetic
                   generator's dict (neuralgeom.synth), or a TrialData container —
                   plus the shared PCA state space and its split-half version

@@ -16,9 +16,9 @@ Adding a task: subclass ``Task``, set ``self.spec``, implement
 ``sample(batch_size) -> TrialBatch``, register in ``TASKS``.
 Adding a model: subclass ``_BaseRNN`` and implement ``step(x, h)``.
 
-The cue-triggered timing task is maintained in a separate repository
-(``timingtask``). It exports a ``Trajectory`` HDF5 file that
-``neuralgeom.data.load_trajectory`` reads; the two packages share no code.
+The cue-triggered lick-timing task is provided by the separate ``timingtask``
+package, which exports the ``Trajectory`` HDF5 schema read by
+``neuralgeom.data.load_trajectory``.
 """
 from .cognitive import (ContextDecision, DelayMatchToSample,
                         EvidenceIntegration, PerceptualDecision, TASKS, Task,

@@ -4,7 +4,7 @@ neuralgeom.synth — synthetic neural data with known generating dynamics.
 
 Generate activity whose generating dynamics are known, so downstream methods
 (neuralgeom.dynamics estimators, neuralgeom.geometry pullbacks) can be validated
-against ground truth before touching real recordings.
+against ground truth.
 
     attractor.py    the two-attractor timing model
                     (Majumder et al.): a 2-D latent [cue mode, ramping mode]
@@ -22,11 +22,10 @@ against ground truth before touching real recordings.
     fixtures.py     tiny latent -> behavior systems with known ground-truth
                     geometry, for validating the pullback metric.
 
-Dependency rule: the dynamics
-estimators consume a ``Session`` built by ``neuralgeom.data.from_synthetic`` from
-the plain dict returned here — ``neuralgeom.dynamics`` never imports this
-package, so recorded and synthetic data flow through the same interface.
-(``tests/test_synth.py`` asserts the independence.)
+``neuralgeom.dynamics`` does not import this package: synthetic data reach
+the estimators as a ``Session`` built by ``neuralgeom.data.from_synthetic``
+from the dict returned here, so recorded and synthetic data flow through the
+same interface.
 """
 
 from .attractor import (generate, make_two_attractor_dataset, embed_rates,

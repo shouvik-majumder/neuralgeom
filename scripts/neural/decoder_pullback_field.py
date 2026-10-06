@@ -21,7 +21,7 @@ Target
 ------
 time_to_lick(i, t) = lick_time_i - t     (seconds, always > 0 in epoch A)
 
-The network sees ONLY the neural state, never t, so it cannot read the answer
+The network sees only the neural state, never t, so it cannot read the answer
 off the clock; it must infer remaining time from population activity.
 
 Cross-validation
@@ -91,9 +91,8 @@ def save(fig, name):
 
 def fit_mlp(H, y, hidden=32, steps=STEPS, lr=5e-3, wd=1e-4, seed=0,
             linear=False):
-    """One hidden layer, 32 tanh units. Kept deliberately small: the map only
-    needs enough capacity to be nonlinear, and a larger net costs 9x the time
-    for no gain in out-of-fold R^2 on this data."""
+    """One hidden layer, 32 tanh units. Small by design: the map only needs
+    enough capacity to be nonlinear."""
     torch.manual_seed(seed)
     k = H.shape[1]
     net = (nn.Sequential(nn.Linear(k, 1)) if linear else

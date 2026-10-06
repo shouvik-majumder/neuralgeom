@@ -71,8 +71,8 @@ def _dxtr():
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             "The DEC layer needs the optional 'dec' extra: "
-            "pip install 'neuralgeom[dec]' (dxtr). Note: 'pydec' on PyPI is a "
-            "DIFFERENT, unrelated package — do not install it."
+            "pip install 'neuralgeom[dec]' (dxtr). The PyPI package 'pydec' is "
+            "unrelated."
         ) from e
 
 

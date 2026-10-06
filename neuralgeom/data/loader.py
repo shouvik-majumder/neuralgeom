@@ -1,62 +1,51 @@
 """
-neuralgeom.data.loader — read Neuropixels session HDF5 files into analysis-ready tensors.
-==========================================================================================
+neuralgeom.data.loader: read recording-session HDF5 files into analysis-ready tensors.
 
-File format (verified against the files themselves; there is no data
-dictionary shipped with them):
-
-    meta/          attrs only: session_id, animal, session_date, training_day,
+File format
+-----------
+    meta/          attrs: session_id, animal, session_date, training_day,
                    exp_type_coarse / exp_type_fine (experimental group),
-                   n_units_*, bin_size_s (0.005), alignment ("cue_onset"),
-                   spike_window_pre_s / post_s (-3 / +6)
-    spikes/counts       (n_units, n_trials, n_bins) spike counts per 5 ms bin
-    spikes/firing_rate  same / bin size (Hz); NOT smoothed
+                   n_units_*, bin_size_s, alignment ("cue_onset"),
+                   spike_window_pre_s / post_s
+    spikes/counts       (n_units, n_trials, n_bins) spike counts per bin
+    spikes/firing_rate  counts / bin_size_s (Hz), unsmoothed
     spikes/t_bins       (n_bins,) bin centres in seconds, cue onset at t = 0
     trials/        per-trial behaviour
     units/         per-unit metadata and quality metrics
 
-The task is a timing task. The behavioural variable is ``first_lick_s`` —
-*when* the animal licks after the cue. Reward requires withholding until a
-required delay. ``response_type`` is 0 = early lick, 1 = rewarded,
-2 = no response, 3 = no-cue catch trial; the loader verifies this coding
-against the boolean flags on every load.
+The recordings are from a cue-triggered lick-timing task. The behavioural
+variable is ``first_lick_s``, the time of the first lick after the cue.
+``response_type`` is 0 = early lick, 1 = rewarded, 2 = no response, 3 = no-cue
+catch trial; the loader checks this coding against the boolean trial flags on
+every load.
 
-Verified facts that shape this loader
--------------------------------------
-* ``is_valid_for_analysis`` already implies ``is_cue_trial`` AND a lick
-  (checked: valid & ~cue == 0 in every session), so a separate cue filter is
-  redundant. No-response and no-cue trials are excluded by validity.
-* ``firing_rate == counts / bin_size_s`` exactly (ratio 200 for 5 ms bins).
-* **``delay_duration_s`` is NOT the required delay and is not used here.** It
-  is uncorrelated with lick time (|r| < 0.06 in every session), its median is
-  2-3 s with a range to 28 s, and on ~98% of *rewarded* trials the lick
-  precedes it. Per the experimenter it is probably a delay-period onset in
-  absolute trial time, not cue-relative, and is not meaningful. It is
-  deliberately dropped from the condition set so downstream code cannot use
-  it by accident.
-* In learning sessions the reward criterion drifts within the session (the
-  bpod protocol has auto-learn: the required delay grows with performance).
-  Example: SM259 day 1, the running minimum rewarded lick time climbs
-  0.11 -> 0.42 s, so "rewarded" vs "early lick" is partly confounded with
-  time in session. ``Session.trial_frac`` exposes normalized trial number so
-  this confound can be regressed out or tested later.
+Trial fields
+------------
+* ``is_valid_for_analysis`` implies a cued trial with a lick; no-response and
+  no-cue trials are excluded by validity.
+* ``delay_duration_s`` is not the required delay (it is uncorrelated with lick
+  time, and rewarded licks typically precede it) and is not exposed; see
+  ``DROPPED_FIELDS``.
+* In learning sessions the required delay increases within the session as
+  performance improves, so trial outcome is partly confounded with time in
+  session. ``Session.trial_frac`` exposes the normalised trial index for use
+  as a covariate.
 
-Formatting conventions (kept compatible with the earlier neuro_core code)
--------------------------------------------------------------------------
-* re-binning SUMS spike counts and divides by the effective bin width;
-* smoothing is a CAUSAL boxcar by default, so activity is never smeared
-  backwards in time (critical for a timing task);
-* activity is returned as X (n_trials, T, N) — the same convention as the
-  ``rnn`` package, so the same analysis code applies;
-* lick-time conditions are quantile bins labelled by their MEDIAN lick time,
-  never "condition 1, 2, 3".
+Conventions
+-----------
+* Re-binning sums spike counts and divides by the effective bin width.
+* Smoothing is a causal boxcar by default, so activity is not smeared
+  backwards in time.
+* Activity is returned as ``X`` with shape ``(n_trials, T, N)``, the
+  convention shared by every analysis in the package.
+* Lick-time conditions are quantile bins labelled by their median lick time.
 
 Typical use
 -----------
->>> from neuro.loader import load_session
+>>> from neuralgeom.data import load_session
 >>> s = load_session("SampleData/SM259_20230417_g0.h5")
 >>> s.X.shape                 # (trials, time, units)
->>> s.lick                    # (trials,) first lick time, s — the behaviour
+>>> s.lick                    # (trials,) first lick time, s
 >>> s.cond["rewarded"]        # boolean trial mask
 >>> b = s.lick_bins(5)        # quantile bins labelled by median lick time
 """
@@ -79,7 +68,7 @@ __all__ = ["Session", "load_session", "list_sessions", "session_table",
 RESPONSE_TYPES = {0: "early_lick", 1: "rewarded", 2: "no_response",
                   3: "no_cue"}
 
-#: Fields deliberately not exposed, with the reason.
+#: Fields not exposed by the loader, with the reason.
 DROPPED_FIELDS = {
     "delay_duration_s": "not the required delay; uncorrelated with lick time "
                         "and rewarded licks precede it (see module docstring)",

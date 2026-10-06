@@ -2,7 +2,7 @@
 session_qc.py — data quality control for the Neuropixels sessions.
 ===================================================================
 
-Purpose: catch data-wrangling problems BEFORE any modelling. Nothing here
+Purpose: catch data problems before any modelling. Nothing here
 fits a model or computes a geometry; every panel describes what is actually
 in the file after loading, with the interpretation written on the figure so
 a wrong assumption is visible rather than buried.

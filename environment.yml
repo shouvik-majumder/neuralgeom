@@ -1,11 +1,8 @@
 # Conda environment for neuralgeom.
 #
-# numpy is pinned <2 because geomstats 2.8.0 (latest) does
-#     from numpy import (... trapz ...)
-# and numpy 2.0 removed np.trapz. geomstats declares numpy>=1.18.1 with NO
-# upper bound, so a resolver will install a broken combination silently.
-# ripser and persim are not the reason: both work on numpy 2. Torch is a core dependency.
-# The pip section carries the packages without reliable conda-forge builds.
+# numpy is pinned <2 because geomstats (2.8.0) imports np.trapz, which numpy 2.0
+# removed, and declares no upper bound on numpy. The pip section carries the
+# packages without reliable conda-forge builds.
 name: neuralgeom
 channels:
   - conda-forge
@@ -31,7 +28,7 @@ dependencies:
       # optional: persistent homology
       - ripser>=0.6
       - persim>=0.3
-      # optional: discrete exterior calculus (NOT 'pydec' — that is unrelated)
+      # optional: discrete exterior calculus (the PyPI package 'pydec' is unrelated)
       - dxtr
       - pypdf>=3.0
       # --- development ---

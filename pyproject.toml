@@ -39,7 +39,7 @@ geom = ["geomstats>=2.7"]
 # neuralgeom.topology.direct).
 topology = ["ripser>=0.6", "persim>=0.3"]
 # Discrete exterior calculus on the pooled manifold (neuralgeom.topology.dec).
-# NB: the PyPI package 'pydec' is a DIFFERENT, unrelated library — do not use it.
+# The PyPI package 'pydec' is an unrelated library.
 dec = ["dxtr"]
 # PDF reports (neuralgeom.viz.report).
 report = ["reportlab>=4.0", "pillow>=9.0", "pypdf>=3.0"]

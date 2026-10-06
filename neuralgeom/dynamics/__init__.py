@@ -3,7 +3,7 @@ neuralgeom.dynamics — geometry of recurrent dynamics.
 =================================================
 
 For a recurrent system the relevant map is the one-step update
-h_{t+1} = F(h_t, x_t), and it has two derivatives worth taking:
+h_{t+1} = F(h_t, x_t), with two derivatives:
 
     J_rec = dF/dh   how the state evolves on its own  -> memory, attractors
     J_inp = dF/dx   how input enters the state        -> gain, selection
@@ -11,7 +11,7 @@ h_{t+1} = F(h_t, x_t), and it has two derivatives worth taking:
 Both are full rank in the state dimension, so ``g = J^T J`` here is a genuine
 field over state space rather than the rank-1 object a scalar decoder gives.
 
-Also here: ESTIMATING dynamics from data (``lds.py``) — three comparable
+Also here: estimation of dynamics from data (``lds.py``) — three comparable
 linear model classes (global LDS, sliding-window LDS, cubic field +
 linearization), shared-field + per-condition-input inference, the
 metric-aware Helmholtz (potential/rotational) decomposition, and the

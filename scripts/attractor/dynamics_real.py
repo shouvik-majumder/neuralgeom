@@ -1,8 +1,8 @@
 """Fit one linear flow to recorded population activity and describe it.
 
-Deliberately simple and descriptive -- no per-condition binning, no instrumental variable, no metric
-choices.  We fit a SINGLE vector field  dz/dt = A z + b  to all post-cue trials and look at it
-from many angles, with a within-trial time-shuffle NULL as the only significance test.
+A descriptive fit: no per-condition binning, no instrumental variable, no metric choices.
+A single vector field dz/dt = A z + b is fit to all post-cue trials and examined from several
+angles, with a within-trial time-shuffle null as the significance test.
 
 Three figures:
   <session>_data.png     : the raw data -- example unit rates, single-trial state trajectories,

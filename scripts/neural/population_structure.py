@@ -4,14 +4,14 @@ population_structure.py — descriptive population structure on two epochs.
 
 Two analyses, never mixed:
 
-  EPOCH A  "prelick"  fixed post-cue window (0 -> W s), keeping ONLY trials
+  EPOCH A  "prelick"  fixed post-cue window (0 -> W s), keeping only trials
                       whose first lick comes after W. Raw traces, no warping.
                       Contains the timing computation and no outcome signal.
   EPOCH B  "full"     fixed -0.5 -> 1.5 s window: pre-cue baseline, cue
                       response, lick and post-lick outcome all included.
 
-Everything here is descriptive. No metric, no model. The point is to know
-what the population does before asking what its geometry is.
+Everything here is descriptive: no metric, no model. It describes what the
+population does before any geometric analysis.
 
 Run:  python scripts/neural/population_structure.py [SESSION_ID] [WINDOW_S]
 """

@@ -45,7 +45,7 @@ plus three small shared modules:
                           cross-validation
     neuralgeom.stats      permutation tests and shuffle constructors
 
-Motivation
+Background
 ----------
 For a differentiable map f, the pullback metric g = Jᵀ M J measures how f
 distorts its domain: which directions are magnified, which are collapsed, and

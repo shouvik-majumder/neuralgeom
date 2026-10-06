@@ -232,6 +232,7 @@ class Trajectory:
             for key, val in self.aux.items():
                 f.create_dataset(f"aux/{key}", data=np.asarray(val))
             f.attrs["meta"] = json.dumps(_jsonable(self.meta))
+            f.attrs["schema"] = "trajectory/1"
             f.attrs["neuralgeom_trajectory"] = True
         return path
 

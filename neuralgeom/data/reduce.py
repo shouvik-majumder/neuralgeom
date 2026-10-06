@@ -2,14 +2,10 @@
 neuralgeom.data.reduce — pluggable dimensionality reduction for population geometry.
 ====================================================================================
 
-Motivation
-----------
-Choosing to run PCA before computing a geometry is itself an arbitrary
-modelling decision, not a neutral preprocessing step. Different reducers keep
-different things and throw different things away, so a geometric result that
-only appears under one of them is a property of that reducer, not of the
-brain. This module puts every option behind one interface so the geometry can
-be recomputed identically across all of them and the dependence reported.
+Dimensionality reduction is a modelling choice that affects every geometric
+quantity computed downstream. This module places the available reducers behind
+one interface so that an analysis can be repeated identically under each of
+them and its dependence on the choice reported.
 
 The interface
 -------------

@@ -17,8 +17,8 @@ Resolution order, first match wins:
   3. ``<repo>/SampleData``.
 
 ``DATA_DIR_SOURCE`` records which rule applied and ``describe_paths()`` prints
-the resolved layout. ``DATA_DIR`` is never created: it is read-only input, and
-silently creating an empty directory would mask a missing mount.
+the resolved layout. ``DATA_DIR`` is never created by this module; a missing directory is
+reported at the point of use.
 
 Outputs. Everything generated lands under ``outputs/``: ``figures/``,
 ``pdf/``, ``checkpoints/``, ``cache/``. Figures live in three flat folders,
@@ -50,9 +50,8 @@ def _resolve_data_dir() -> tuple[Path, str]:
 
     Returns ``(path, source)`` where *source* is a short human-readable string
     naming which resolution rule fired. See the module docstring for the
-    order. Deliberately does no existence check: a missing network mount
-    should surface at the point of use, with a message naming the path and
-    where that path came from, rather than at import time.
+    order. No existence check is performed here; a missing directory is
+    reported at the point of use with the path and its source.
     """
     env = os.environ.get(_DATA_DIR_ENV, "").strip().lstrip("\ufeff").strip('"')
     if env:

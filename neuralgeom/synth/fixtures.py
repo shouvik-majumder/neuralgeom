@@ -1,7 +1,7 @@
 """Synthetic latent -> behavior systems with known ground-truth geometry.
 
-Used to validate that the pullback metric recovers the behaviorally-relevant directions
-we built in, before touching real data. The generative model:
+Used to validate that the pullback metric recovers known behaviourally relevant
+directions. The generative model:
 
   - a low-D latent state x in R^d,
   - a scalar timing readout   latency(x) = tau0 + softplus(c - w_lat . x)   [seconds],

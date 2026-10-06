@@ -206,9 +206,9 @@ def fit_lds(Z, V, groups=None, ridge=1e-3, cv=True, instrument=None):
 
     This removes the errors-in-variables bias.  Observation noise eps enters the regressor
     z[t] = z_true[t] + eps[t] and, with the opposite sign, the finite difference
-    (z[t+gap] - z[t])/(gap*dt), so E[z^T v] acquires a term -Var(eps)/(gap*dt) * I: OLS
-    manufactures a SYMMETRIC contraction that is pure measurement noise, inflating both the
-    apparent attractor strength and the apparent "gradient" fraction of the Helmholtz split.
+    (z[t+gap] - z[t])/(gap*dt), so E[z^T v] acquires a term -Var(eps)/(gap*dt) * I. OLS
+    therefore estimates a spurious symmetric contraction, inflating both the apparent
+    attractor strength and the apparent gradient fraction of the Helmholtz split.
     A lagged state has independent observation noise and is a valid instrument.
     """
     Z = np.asarray(Z, float); V = np.asarray(V, float)
@@ -248,8 +248,8 @@ def fit_lds(Z, V, groups=None, ridge=1e-3, cv=True, instrument=None):
 
 
 def _iv_solve(D, Wi, V, reg):
-    """Two-stage least squares.  Note the ridge shrinks toward ZERO, i.e. opposite in sign to
-    the OLS errors-in-variables bias, so it cannot manufacture a rotation-dominant answer."""
+    """Two-stage least squares.  The ridge shrinks toward zero, opposite in sign to the OLS
+    errors-in-variables bias, so it does not bias the estimate toward a rotation-dominated field."""
     Dhat = Wi @ np.linalg.solve(Wi.T @ Wi + 1e-8 * np.eye(Wi.shape[1]), Wi.T @ D)
     return _ridge_solve(Dhat, V, reg)
 
@@ -462,11 +462,11 @@ def _input_bins(tau_s, bin_s):
 
 def fit_shared_input_free(Z, V, cond, tau_s, groups=None, field="lds", input_bin_s=0.05,
                           ridge_field=1e-3, ridge_input=8.0, degree=3, cv=True):
-    """I-A: ONE shared field + a per-condition, time-resolved, ONSET-ONLY input.
+    """One shared field plus a per-condition, time-resolved input, free for tau >= 0.
 
         dz/dt = F(z) + I_c(tau),    tau = time since cue onset, free for tau >= 0
 
-    No cue duration is assumed anywhere (hard constraint): the input is a free ridge-penalized
+    No cue duration is assumed: the input is a free ridge-penalized
     function of time-since-onset, and the data decide how long it lasts.
     ``field`` is 'lds' (F(z) = A z + b) or 'cubic' (polynomial field).
 
@@ -711,7 +711,7 @@ def _selftest():
     print(f"   symmetric_part_norm_fraction under Euclidean = {e['symmetric_part_norm_fraction']:.3f}   under M = {m['symmetric_part_norm_fraction']:.3f}")
     assert m["symmetric_part_norm_fraction"] > 0.999 and e["symmetric_part_norm_fraction"] < 0.999
     assert np.allclose(m["Skew"], 0, atol=1e-10)
-    print("   -> confirms the split is metric-dependent (the point of metric_dependence()).")
+    print("   -> confirms the split is metric-dependent (see metric_dependence()).")
 
     print("3) LDS recovery from simulated trajectories + CV + shuffle null")
     Dd, dt, nT, T = 3, 0.02, 60, 120

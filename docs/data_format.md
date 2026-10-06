@@ -28,7 +28,7 @@ in `aux["n_steps"]`.
 ```
 /X, /time, /inputs, /outputs, /condition, /W, /U, /V     datasets (optional ones omitted)
 /aux/<key>                                                one dataset per aux entry
-attrs: dt, tau, meta (JSON string), neuralgeom_trajectory = True
+attrs: dt, tau, meta (JSON string), schema = "trajectory/1", neuralgeom_trajectory = True
 ```
 
 Any external code that writes this layout can be analysed without importing

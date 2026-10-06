@@ -2,8 +2,8 @@
 reducer_sweep.py — sweep the dimensionality reducer and the number of conditions.
 ==================================================================================
 
-Motivation
-----------
+Purpose
+-------
 The agreement between condition-wise covariance geometry and lick time depends
 on choices that are not principled: which reducer, how many dimensions, and
 how many lick-time bins. Rather than fix one setting, this script maps the

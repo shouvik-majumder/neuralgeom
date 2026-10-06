@@ -2,17 +2,16 @@
 Demo 4 — regression: the geometry of a scalar-output network.
 =============================================================
 
-A regression network f: R^2 -> R is geometrically EXTREME: the output is
+A regression network f: R^2 -> R is a limiting case: the output is
 1-dimensional, so the pullback metric g = J^T J = grad(f) grad(f)^T has rank
-1 at every single point. The "degenerate metric" machinery is not an edge
-case here — it is the whole story:
+1 at every point. The degenerate-metric tools are therefore central here:
 
     pseudo-volume element  = |grad f|      (the only stretch there is)
     row space (k=1)        = gradient direction (perpendicular to level sets)
     kernel of g            = the level-set direction f is blind to
 
 Because the regression target is a known analytic function, this demo can do
-something the classification demos could not: VALIDATE the learned geometry
+something the classification demos could not: validate the learned geometry
 against exact ground truth.
 
 Pipeline:
@@ -21,8 +20,8 @@ Pipeline:
   Step 2  Row-space field = gradient directions vs level sets
   Step 3  Validation: angle error against the ANALYTIC gradient +
           breakdown outside the training support (extrapolation warning map)
-  Step 4  Fixed-rank PSD tools on a transect (the honest metric comparison)
-  Step 5  What regression geometry CANNOT tell you
+  Step 4  Fixed-rank PSD tools on a transect
+  Step 5  Limits of regression geometry
 
 Run:  python demo_regression.py
 """

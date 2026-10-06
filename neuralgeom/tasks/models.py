@@ -9,10 +9,9 @@ Every model implements:
     y      = model.readout(h)       # (B,hidden) -> (B,out)
     model.hidden_size, model.state_is_tuple
 
-``step`` is the method the geometry tools rely on: it is a pure function of
-(x, h) with no side effects, so ``torch.func`` can take Jacobians of it. This
-is what allows the pullback-metric tools to be applied to the *dynamics*
-(recurrent Jacobian dh_{t+1}/dh_t) rather than only to a feedforward map.
+``step`` is a pure function of ``(x, h)`` with no side effects, so
+``torch.func`` can take Jacobians of it; :mod:`neuralgeom.dynamics` relies on
+this to compute recurrent and input Jacobians along a trajectory.
 
 VanillaRNN is the standard continuous-time ("leaky") tanh RNN used in
 systems neuroscience:
@@ -20,9 +19,8 @@ systems neuroscience:
     h_{t+1} = (1 - alpha) h_t + alpha * tanh(W_rec h_t + W_in x_t + b + noise)
     alpha   = dt / tau
 
-with alpha < 1 giving the network an intrinsic time constant. Noise during
-training encourages robust solutions (and the attractor structure the
-analysis module looks for).
+Private noise during training encourages solutions that are robust to
+perturbation.
 """
 from __future__ import annotations
 
@@ -75,12 +73,15 @@ class VanillaRNN(_BaseRNN):
 
     Parameters
     ----------
-    tau : membrane time constant (ms); alpha = dt / tau
-    dt : integration step (ms) — should match the task's dt
-    noise : SD of private recurrent noise (scaled by sqrt(2*alpha)); set to
-        0.0 (or call ``model.eval()``) for deterministic analysis
-    rec_init : "gaussian" (chaotic-ish, g/sqrt(N)) or "orthogonal"
+    tau : unit time constant (ms); alpha = dt / tau. A scalar, or a
+        ``(low, high)`` pair for log-uniform per-unit values.
+    dt : integration step (ms); should match the task's dt
+    noise : SD of private recurrent noise, scaled by ``sqrt(2 / alpha)`` so
+        that its stationary variance is independent of dt. Applied in
+        training mode only.
+    rec_init : "gaussian" (i.i.d. N(0, g^2 / N)) or "orthogonal" (scaled by g)
     train_h0 : learn the initial state instead of fixing it at 0
+    train_tau : learn the (log) time constants
     """
 
     def __init__(self, input_size, hidden_size, output_size, *,
@@ -89,31 +90,13 @@ class VanillaRNN(_BaseRNN):
                  train_h0: bool = False, train_tau: bool = False,
                  nonlinearity=torch.tanh):
         super().__init__(input_size, hidden_size, output_size)
-        # tau may be a single number (every unit identical, the original
-        # behaviour) or a (low, high) pair, in which case the units get time
-        # constants log-uniform over that range. MILLISECONDS, like dt.
-        #
-        # tau is the RATE-UNIT time constant, not a membrane time constant. A
-        # cortical membrane tau is 10-20 ms; 100 ms is the usual value for a
-        # rate unit and is taken to stand for NMDA-dominated synaptic decay.
-        # Do not reach past that range to buy slow dynamics: measured intrinsic
-        # timescales in cortex top out around 350 ms (Murray et al. 2014) and
-        # those are NETWORK autocorrelations, not single-unit leaks.
-        #
-        # Slow behaviour is meant to come from the recurrent connectivity. With
-        # tau = 100 ms (alpha = 0.2), a mode lasting 1 s needs an eigenvalue of
-        # W_rec at +0.90 ON THE POSITIVE REAL AXIS -- |lambda_W| = 0.9 at 0 deg
-        # gives tau_mode = 0.99 s, but the same modulus at 60 deg gives 0.20 s.
-        # A g/sqrt(N) Gaussian scatters eigenvalues uniformly over the disc, so
-        # it puts only ~3 of 128 modes past 1 s. That is a statement about the
-        # INITIALISATION, not about what the architecture can represent.
         if isinstance(tau, (tuple, list)):
             lo, hi = float(tau[0]), float(tau[1])
             t = torch.exp(torch.empty(hidden_size).uniform_(
                 math.log(lo), math.log(hi)))
         else:
             t = torch.full((hidden_size,), float(tau))
-        # tau must exceed dt or alpha > 1 and a unit overshoots in one step.
+        # tau must exceed dt, otherwise alpha > 1 and the update overshoots.
         log_tau = torch.log(t.clamp_min(float(dt) * 1.0001))
         if train_tau:
             self.log_tau = nn.Parameter(log_tau)
