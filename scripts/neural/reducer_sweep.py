@@ -32,8 +32,8 @@ Terms
   PCs. If an effect appears equally under random directions, it is a
   consequence of working in k dimensions, not of the structure PCA found.
 
-What is swept
--------------
+Sweep
+-----
   reducer      full space | PCA k in {2,3,5,8,10,15,20} | PCA at 80%/90%
                variance | random projection at matched k (null)
   n_bins       {4, 6, 8, 10, 12}
